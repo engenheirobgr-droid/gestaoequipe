@@ -12,83 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     
-    <!-- Firebase SDK -->
-    <script type="module">
-        // Import the functions you need from the SDKs you need
-        import { initializeApp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, 
-            collection, query, writeBatch, getDocs
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // *******************************************************************
-        // ** PASSO IMPORTANTE: COLE A CONFIGURAÇÃO DO SEU FIREBASE AQUI **
-        // Copie o objeto 'firebaseConfig' das configurações do seu projeto no Firebase
-        // e substitua a linha de placeholder abaixo.
-        // Exemplo:
-        // const firebaseConfig = {
-        //   apiKey: "AIzaSy...",
-        //   authDomain: "seu-projeto.firebaseapp.com",
-        //   ...
-        // };
-        const firebaseConfig = {
-    apiKey: "AIzaSyB3jYiqJ2GO_N6tVmBQcxXo630B4ks0zzg",
-    authDomain: "gestao-de-equipe.firebaseapp.com",
-    projectId: "gestao-de-equipe",
-    storageBucket: "gestao-de-equipe.firebasestorage.app",
-    messagingSenderId: "545987735171",
-    appId: "1:545987735171:web:ad1c63e748969a497e35b6"
-  };;
-        // *******************************************************************
-
-        // Verifica se a configuração é apenas um placeholder
-        const isConfigPlaceholder = !firebaseConfig || Object.keys(firebaseConfig).length === 0 || firebaseConfig.apiKey === undefined;
-
-        if (isConfigPlaceholder) {
-            // Se a configuração estiver faltando, exibe uma mensagem de erro clara e para a execução.
-            document.addEventListener('DOMContentLoaded', () => {
-                document.body.innerHTML = `
-                    <div class="bg-gray-900 text-white p-8 text-center h-screen flex flex-col justify-center items-center">
-                        <div class="bg-red-800 border border-red-600 p-10 rounded-lg shadow-2xl max-w-2xl">
-                            <h1 class="text-3xl font-bold mb-4">Erro de Configuração</h1>
-                            <p class="text-lg">A configuração do Firebase não foi encontrada no código do aplicativo.</p>
-                            <p class="mt-4 text-gray-300 text-left">
-                                <strong>Para corrigir:</strong><br>
-                                1. Abra o console do seu projeto no Firebase.<br>
-                                2. Vá para "Configurações do Projeto" (ícone de engrenagem).<br>
-                                3. Na aba "Geral", role até "Seus apps".<br>
-                                4. Em "Configuração e Instalação do SDK", selecione "CDN".<br>
-                                5. Copie o objeto de código <strong>const firebaseConfig = { ... };</strong><br>
-                                6. Edite o arquivo <strong>app_gestao.html</strong>, encontre este mesmo local no código e cole o objeto que você copiou.<br>
-                                7. Salve e envie o arquivo atualizado para o GitHub.
-                            </p>
-                        </div>
-                    </div>
-                `;
-            });
-            // Lança um erro para parar completamente a execução do script.
-            throw new Error("Configuração do Firebase ausente. O usuário foi notificado na tela.");
-        } else {
-            // Se a configuração existe, inicializa o Firebase.
-            const app = initializeApp(firebaseConfig);
-            const db = getFirestore(app);
-            const auth = getAuth(app);
-
-            // Enable debug logging for Firestore
-            // setLogLevel('debug');
-
-            // Make db and auth available globally for our main script
-            window.db = db;
-            window.auth = auth;
-            window.firebase = {
-                 doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, 
-                 collection, query, writeBatch, getDocs, signInAnonymously, 
-                 signInWithCustomToken, onAuthStateChanged
-            };
-        }
-    </script>
-
+    <!-- Bloco de Estilos CSS -->
     <style>
         body { font-family: 'Inter', sans-serif; }
         .kanban-column { min-height: 200px; }
@@ -106,6 +30,9 @@
     </style>
 </head>
 <body class="bg-gray-900 text-white">
+
+    <!-- Estrutura HTML completa do seu app (Cabeçalho, Navegação, Conteúdo das Abas, Modais, etc.) -->
+    <!-- Cabeçalho -->
     <header class="bg-gray-800 p-4 shadow-md sticky top-0 z-20">
         <div class="container mx-auto flex justify-between items-center flex-wrap">
             <div class="flex items-center space-x-4">
@@ -132,6 +59,8 @@
         </div>
     </header>
     <input type="file" id="file-input" class="hidden" accept=".xlsx,.xls,.csv,.iqy">
+
+    <!-- Navegação por Abas -->
     <div class="container mx-auto px-4 border-b border-gray-700 sticky top-[72px] bg-gray-900 z-10">
         <nav class="flex space-x-8">
             <button id="tab-dashboard" class="tab-btn active py-4 px-1 border-b-2 border-transparent text-gray-400 hover:text-white transition flex items-center">
@@ -166,10 +95,13 @@
             </button>
         </nav>
     </div>
+    
+    <!-- Painel de Filtros -->
     <div id="global-filters-panel" class="container mx-auto px-4 pt-4">
         <div class="bg-gray-800 rounded-lg p-4">
             <h2 class="text-xl font-bold mb-4">Filtros</h2>
             <div id="global-filters" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-sm">
+                <!-- Filtros populados via JS -->
             </div>
             <button id="clear-filters-btn" class="mt-4 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center space-x-2 justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -179,7 +111,10 @@
             </button>
         </div>
     </div>
+
+    <!-- Conteúdo das Abas -->
     <div id="tab-content" class="container mx-auto p-4">
+        <!-- Aba do Dashboard -->
         <div id="view-dashboard">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div class="bg-gray-800 p-4 rounded-lg text-center">
@@ -198,18 +133,26 @@
                     <p class="text-xs text-gray-500">(Itens concluídos)</p>
                 </div>
             </div>
+
+            <!-- WIP Tracker -->
             <div class="bg-gray-800 p-4 rounded-lg mb-6">
                 <h3 class="text-lg font-semibold text-center mb-2">Em Execução Agora</h3>
                 <div id="wip-tracker-container" class="space-y-1">
+                    <!-- Populated by JS -->
                 </div>
             </div>
+
+            <!-- Charts -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[450px]"><canvas id="cumulativeFlowChart"></canvas></div>
                 <div class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[450px]"><canvas id="timeEvolutionChart"></canvas></div>
                 <div class="bg-gray-800 p-4 rounded-lg h-[450px]"><canvas id="responsaveisChart"></canvas></div>
                 <div class="bg-gray-800 p-4 rounded-lg h-[450px]"><canvas id="statusDistributionChart"></canvas></div>
+                
                 <div id="effort-analysis-chart-container" class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[450px]"><canvas id="effortAnalysisChart"></canvas></div>
                 <div id="efficiency-chart-container" class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[450px]"><canvas id="efficiencyChart"></canvas></div>
+                
+                <!-- Seção de Horas Investidas -->
                 <div class="col-span-1 lg:col-span-2 bg-gray-800 p-4 rounded-lg">
                     <div class="flex justify-end mb-4">
                          <select id="time-log-week-selector" class="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"></select>
@@ -219,9 +162,12 @@
                          <div class="h-[450px]"><canvas id="processHoursChart"></canvas></div>
                     </div>
                 </div>
+
                 <div class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[450px]"><canvas id="nucleoChart"></canvas></div>
             </div>
         </div>
+        
+        <!-- Aba de Demandas -->
         <div id="view-demandas" class="hidden">
             <div class="bg-gray-800 rounded-lg p-4">
                 <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
@@ -237,35 +183,430 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- Aviso de Duplicatas -->
                 <div id="duplicate-warning" class="hidden bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg relative mb-4" role="alert">
                     <strong class="font-bold">Atenção:</strong>
                     <span class="block sm:inline" id="duplicate-message"></span>
                 </div>
+
                 <div id="table-container" class="overflow-auto text-sm max-h-[60vh] rounded-lg">
                     <p class="text-gray-400 p-4">Nenhum dado importado. Clique em "Importar Demandas" para começar.</p>
                 </div>
             </div>
         </div>
+
+        <!-- Aba do Catálogo -->
         <div id="view-catalogo" class="hidden">
+            <div class="bg-gray-800 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                    <h2 class="text-xl font-bold">Catálogo de Atividades e Tempos</h2>
+                    <button id="add-activity-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg flex items-center space-x-2">
+                       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"> <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /> </svg>
+                        <span>Nova Atividade</span>
+                    </button>
+                </div>
+                <div id="catalog-table-container" class="overflow-auto text-sm max-h-[70vh] rounded-lg">
+                    <!-- Tabela do catálogo será gerada aqui -->
+                </div>
+            </div>
         </div>
+
+        <!-- Aba de Head Count -->
         <div id="view-hc" class="hidden">
+            <div class="bg-gray-800 rounded-lg p-6">
+                 <div class="flex items-center justify-center mb-6">
+                     <h2 class="text-2xl font-bold text-center">Análise de Head Count (HC)</h2>
+                     <div class="tooltip-container ml-2">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                         </svg>
+                         <span class="tooltip absolute bottom-full mb-2 w-72 p-2 text-xs bg-gray-900 border border-gray-700 rounded-md shadow-lg text-left">O cálculo de HC (Head Count) é uma estimativa de quantos colaboradores são necessários. <br><b>Fórmula:</b> (Total Horas) / (Carga Horária Mensal × Fator de Produtividade).</span>
+                     </div>
+                 </div>
+                 
+                 <div class="bg-gray-700/50 p-4 rounded-lg mb-8">
+                     <h3 class="text-xl font-semibold mb-4 text-center">Parâmetros de Cálculo</h3>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                         <div class="text-center">
+                             <label for="hc-hours-input" class="block text-lg font-semibold text-gray-400 mb-2">Carga Horária Mensal / Colaborador</label>
+                             <input type="number" id="hc-hours-input" value="191" class="w-32 mx-auto p-2 text-2xl font-bold text-center rounded bg-gray-800 border border-gray-600 text-purple-400">
+                         </div>
+                         <div class="text-center">
+                             <div class="flex items-center justify-center">
+                                 <label for="hc-productivity-factor" class="block text-lg font-semibold text-gray-400 mb-2">Fator de Produtividade (%)</label>
+                                 <div class="tooltip-container ml-2">
+                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                         <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                     </svg>
+                                     <span class="tooltip absolute bottom-full mb-2 w-64 p-2 text-xs bg-gray-900 border border-gray-700 rounded-md shadow-lg">Percentual do tempo que um colaborador efetivamente se dedica a tarefas produtivas, desconsiderando reuniões, pausas, etc. (Padrão de mercado: 70-85%)</span>
+                                 </div>
+                             </div>
+                             <input type="number" id="hc-productivity-factor" value="80" class="w-32 mx-auto p-2 text-2xl font-bold text-center rounded bg-gray-800 border border-gray-600 text-purple-400">
+                         </div>
+                     </div>
+                 </div>
+
+                 <!-- Resumo das Horas -->
+                 <div class="bg-gray-700/50 p-4 rounded-lg mb-8">
+                     <div class="flex items-center justify-center">
+                        <h3 class="text-xl font-semibold mb-4 text-center">Resumo de Horas (Base para Cálculo Mensal)</h3>
+                        <div class="tooltip-container ml-2">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                 <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                             </svg>
+                             <span class="tooltip absolute bottom-full mb-2 w-80 p-2 text-xs bg-gray-900 border border-gray-700 rounded-md shadow-lg text-left">
+                                 <b>HC Base:</b> Soma dos tempos unitários do catálogo (não é um total de horas). <br>
+                                 <b>HC Demanda Atual:</b> Soma das horas previstas das demandas importadas/filtradas. <br>
+                                 <b>HC Anual (100%):</b> Média mensal de horas se 100% da necessidade anual do catálogo fosse executada. <br>
+                                 <b>HC com Backlog:</b> Média mensal de horas considerando o % de realização definido no catálogo.
+                             </span>
+                         </div>
+                     </div>
+                     <div class="grid grid-cols-4 gap-4 text-center text-sm">
+                         <div class="font-bold text-gray-400">Tipo de HC</div>
+                         <div class="font-bold text-gray-400">Total Horas Eng.</div>
+                         <div class="font-bold text-gray-400">Total Horas Tec.</div>
+                         <div class="font-bold text-gray-400">Total Horas</div>
+                         
+                         <div class="text-gray-300">Base</div>
+                         <div><p id="summary-base-eng" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-base-tec" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-base-total" class="font-mono p-1 bg-gray-800 rounded font-bold">--</p></div>
+
+                         <div class="text-gray-300">Demanda Atual</div>
+                         <div><p id="summary-current-eng" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-current-tec" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-current-total" class="font-mono p-1 bg-gray-800 rounded font-bold">--</p></div>
+
+                         <div class="text-gray-300">Anual (100%)</div>
+                         <div><p id="summary-annual-eng" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-annual-tec" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-annual-total" class="font-mono p-1 bg-gray-800 rounded font-bold">--</p></div>
+
+                         <div class="text-gray-300">Com Backlog</div>
+                         <div><p id="summary-real-eng" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-real-tec" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-real-total" class="font-mono p-1 bg-gray-800 rounded font-bold">--</p></div>
+                     </div>
+                 </div>
+
+                 <div class="bg-gray-700/50 p-4 rounded-lg mb-8">
+                    <h3 class="text-xl font-semibold mb-4 text-center">HC Total (Engenheiro + Técnico)</h3>
+                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-gray-400">HC Base</h3>
+                            <p id="hc-base-total" class="text-3xl font-bold text-green-400">--</p>
+                        </div>
+                         <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-gray-400">HC Demanda Atual</h3>
+                            <p id="hc-current-total" class="text-3xl font-bold text-green-400">--</p>
+                        </div>
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-gray-400">HC Anual (100%)</h3>
+                            <p id="hc-annual-total" class="text-3xl font-bold text-green-400">--</p>
+                        </div>
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-gray-400">HC com Backlog</h3>
+                            <p id="hc-real-total" class="text-3xl font-bold text-green-400">--</p>
+                        </div>
+                     </div>
+                 </div>
+
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                     <div class="bg-gray-700/50 p-4 rounded-lg">
+                         <h3 class="text-xl font-semibold mb-4 text-center">Composição HC Engenheiro</h3>
+                         <div class="grid grid-cols-2 gap-4 text-center">
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Base</h4><p id="hc-base-eng" class="text-2xl font-bold text-blue-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Atual</h4><p id="hc-current-eng" class="text-2xl font-bold text-blue-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Anual (100%)</h4><p id="hc-annual-eng" class="text-2xl font-bold text-blue-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Com Backlog</h4><p id="hc-real-eng" class="text-2xl font-bold text-blue-400">--</p></div>
+                         </div>
+                     </div>
+                     <div class="bg-gray-700/50 p-4 rounded-lg">
+                         <h3 class="text-xl font-semibold mb-4 text-center">Composição HC Técnico</h3>
+                         <div class="grid grid-cols-2 gap-4 text-center">
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Base</h4><p id="hc-base-tec" class="text-2xl font-bold text-teal-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Atual</h4><p id="hc-current-tec" class="text-2xl font-bold text-teal-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Anual (100%)</h4><p id="hc-annual-tec" class="text-2xl font-bold text-teal-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Com Backlog</h4><p id="hc-real-tec" class="text-2xl font-bold text-teal-400">--</p></div>
+                         </div>
+                     </div>
+                 </div>
+
+                 <div class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[500px]"><canvas id="hc-process-chart"></canvas></div>
+            </div>
         </div>
+
+
+        <!-- Aba do Kanban -->
         <div id="view-kanban" class="hidden">
+            <!-- Controles de Ordenação do Kanban -->
+            <div class="bg-gray-800 rounded-lg p-3 mb-4 flex items-center justify-end space-x-4 text-sm">
+                <label for="kanban-sort-by" class="font-semibold">Ordenar por:</label>
+                <select id="kanban-sort-by" class="bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="score">Score</option>
+                    <option value="createdAt">Data de Criação</option>
+                    <option value="id">ID</option>
+                    <option value="reclamacoes">Nº de Reclamações</option>
+                    <option value="criticidade">Criticidade</option>
+                </select>
+                <select id="kanban-sort-direction" class="bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="desc">Maior para Menor</option>
+                    <option value="asc">Menor para Menor</option>
+                </select>
+            </div>
+            
+            <main id="kanban-board" class="flex space-x-4 overflow-x-auto no-scrollbar pb-4">
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-gray-500 pb-2 flex justify-center items-center">Caixa de Entrada<span id="count-triagem" class="ml-2 text-sm font-mono bg-gray-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-triagem" class="kanban-column space-y-3" data-status="triagem"></div></div>
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-yellow-500 pb-2 flex justify-center items-center">Backlog Priorizado<span id="count-backlog" class="ml-2 text-sm font-mono bg-yellow-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-backlog" class="kanban-column space-y-3" data-status="backlog"></div></div>
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-blue-500 pb-2 flex justify-center items-center">A Fazer<span id="count-fazer" class="ml-2 text-sm font-mono bg-blue-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-fazer" class="kanban-column space-y-3" data-status="fazer"></div></div>
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-purple-500 pb-2 flex justify-center items-center">Em Andamento<span id="count-andamento" class="ml-2 text-sm font-mono bg-purple-600 rounded-full px-2 py-0.5">0/5</span></h2><div id="column-andamento" class="kanban-column space-y-3" data-status="andamento"></div></div>
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-indigo-500 pb-2 flex justify-center items-center">Em Validação<span id="count-validacao" class="ml-2 text-sm font-mono bg-indigo-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-validacao" class="kanban-column space-y-3" data-status="validacao"></div></div>
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-green-500 pb-2 flex justify-center items-center">Concluído<span id="count-concluido" class="ml-2 text-sm font-mono bg-green-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-concluido" class="kanban-column space-y-3" data-status="concluido"></div></div>
+            </main>
         </div>
     </div>
+
+     <!-- Modal Edição Catálogo -->
+    <div id="catalog-edit-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-lg">
+            <form id="catalog-edit-form">
+                <input type="hidden" id="original-activity-name">
+                <h2 id="catalog-modal-title" class="text-2xl font-bold mb-4">Editar Atividade</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="edit-activity-name" class="block mb-1 font-semibold text-sm">Nome da Atividade</label>
+                        <input type="text" id="edit-activity-name" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                    </div>
+                    <div>
+                        <label for="edit-activity-process" class="block mb-1 font-semibold text-sm">Processo</label>
+                        <input type="text" id="edit-activity-process" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                    </div>
+                     <div>
+                        <label for="edit-activity-role" class="block mb-1 font-semibold text-sm">Função</label>
+                        <select id="edit-activity-role" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                            <option value="Eng">Eng</option>
+                            <option value="Tec">Tec</option>
+                            <option value="Eng/Tec">Eng/Tec</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="edit-activity-time" class="block mb-1 font-semibold text-sm">Tempo Previsto (h)</label>
+                        <input type="number" id="edit-activity-time" step="0.1" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                    </div>
+                     <div>
+                        <label for="edit-activity-annual-need" class="block mb-1 font-semibold text-sm">Necessidade Anual</label>
+                        <input type="number" id="edit-activity-annual-need" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                    </div>
+                     <div>
+                        <label for="edit-activity-execution-percentage" class="block mb-1 font-semibold text-sm">% de Realização</label>
+                        <input type="number" id="edit-activity-execution-percentage" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center mt-6 pt-4 border-t border-gray-700">
+                    <button type="button" id="delete-activity-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Excluir</button>
+                    <div>
+                        <button type="button" id="cancel-catalog-edit-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg mr-2">Cancelar</button>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- Modal para Adicionar/Editar Demanda -->
+    <div id="demand-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-screen overflow-y-auto no-scrollbar relative">
+            
+            <form id="demand-form">
+                <input type="hidden" id="demand-id">
+                <div class="flex justify-between items-start mb-6 border-b border-gray-700 pb-4">
+                    <h2 id="modal-title" class="text-2xl font-bold pt-1">Nova Demanda</h2>
+                    <div class="flex items-start space-x-4">
+                        <div class="text-right">
+                            <label for="demand-status" class="block text-sm font-semibold text-gray-400">Status</label>
+                            <select id="demand-status" class="p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                        </div>
+                        <button type="button" id="close-modal-btn" class="text-gray-400 hover:text-white text-3xl font-bold leading-none">&times;</button>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8">
+                    <!-- Coluna da Esquerda: Dados Gerais -->
+                    <div class="space-y-4">
+                        <fieldset class="border border-gray-700 p-3 rounded-lg bg-gray-700/30">
+                            <legend class="text-sm font-semibold px-2 text-gray-400">Dados da Planilha</legend>
+                            <div id="original-data-content" class="grid grid-cols-2 gap-x-4 gap-y-2 mt-2 text-sm"></div>
+                        </fieldset>
+
+                        <div>
+                            <label for="demand-title" class="block mb-1 font-semibold text-sm">Título da Demanda</label>
+                            <input type="text" id="demand-title" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                        </div>
+                         <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                 <label for="demand-responsible" class="block mb-1 font-semibold text-sm">Responsável</label>
+                                 <select id="demand-responsible" class="w-full p-2 rounded bg-gray-700 border border-gray-600"></select>
+                            </div>
+                            <div>
+                                 <label for="demand-nucleus" class="block mb-1 font-semibold text-sm">Núcleo</label>
+                                 <select id="demand-nucleus" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                                      <option value="">Não definido</option>
+                                      <option value="Proteção">Proteção</option>
+                                      <option value="Automação">Automação</option>
+                                      <option value="Estudos">Estudos</option>
+                                 </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="demand-description" class="block mb-1 font-semibold text-sm">Descrição</label>
+                            <textarea id="demand-description" rows="3" class="w-full p-2 rounded bg-gray-700 border border-gray-600"></textarea>
+                        </div>
+                        <div id="completion-date-wrapper">
+                            <label for="demand-completion-date" class="block mb-1 font-semibold text-sm">Data de Conclusão</label>
+                            <input type="datetime-local" id="demand-completion-date" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                        </div>
+                    </div>
+
+                    <!-- Coluna da Direita: Priorização -->
+                    <div class="space-y-4 mt-4 lg:mt-0">
+                        <div class="border border-gray-700 p-4 rounded-lg bg-gray-700/30">
+                             <h3 class="text-lg font-semibold mb-3 text-blue-300">Priorização</h3>
+                             <div id="prioritization-criteria" class="bg-gray-900/50 p-3 rounded-md mb-4">
+                                 <h4 class="font-bold text-sm mb-2">Critérios de Priorização (Ordem)</h4>
+                                 <ol class="list-decimal list-inside text-sm space-y-2">
+                                     <li><strong>Score:</strong> <span id="crit-score" class="font-bold text-yellow-400">--</span></li>
+                                     <li><strong>Nº Reclamações (30d):</strong> <span id="crit-reclamacoes" class="font-bold text-yellow-400">--</span></li>
+                                     <li><strong>Entrada (FIFO):</strong> <span id="crit-prazo" class="font-bold text-yellow-400">--</span></li>
+                                 </ol>
+                             </div>
+
+                             <div>
+                                <label for="demand-type" class="block mb-1 font-semibold text-sm">Tipo de Cálculo</label>
+                                <select id="demand-type" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                                    <option value="">Não calcular score</option>
+                                    <option value="problema">Problema / Falha (GUT)</option>
+                                    <option value="melhoria">Melhoria / Projeto (RICE)</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Formulário GUT -->
+                        <fieldset id="gut-fields" class="hidden border border-gray-700 p-4 rounded-lg">
+                            <legend class="text-md font-semibold px-2">Matriz GUT</legend>
+                            <div class="grid grid-cols-3 gap-4 mt-2">
+                                <div><label for="gut-g" class="block text-sm mb-1">Gravidade (1-5)</label><input type="number" id="gut-g" min="1" max="5" class="w-full p-2 rounded bg-gray-900 border border-gray-600"></div>
+                                <div><label for="gut-u" class="block text-sm mb-1">Urgência (1-5)</label><input type="number" id="gut-u" min="1" max="5" class="w-full p-2 rounded bg-gray-900 border border-gray-600"></div>
+                                <div><label for="gut-t" class="block text-sm mb-1">Tendência (1-5)</label><input type="number" id="gut-t" min="1" max="5" class="w-full p-2 rounded bg-gray-900 border border-gray-600"></div>
+                            </div>
+                            <div class="mt-3 text-center bg-gray-900/50 p-2 rounded-lg">
+                                <p class="text-sm text-gray-400" id="gut-formula-display">G x U x T = Score</p>
+                                <span class="text-lg font-bold">Score GUT: <span id="gut-score-display" class="text-xl text-red-400">0</span></span>
+                            </div>
+                        </fieldset>
+
+                        <!-- Formulário RICE -->
+                        <fieldset id="rice-fields" class="hidden border border-gray-700 p-4 rounded-lg">
+                            <legend class="text-md font-semibold px-2">Matriz RICE</legend>
+                             <div class="grid grid-cols-2 gap-4 mt-2">
+                                <div>
+                                    <label for="rice-reach" class="block text-sm mb-1">Alcance (Reach)</label>
+                                    <input type="number" id="rice-reach" min="0" class="w-full p-2 rounded bg-gray-900 border border-gray-600">
+                                </div>
+                                <div>
+                                    <label for="rice-impact" class="block text-sm mb-1">Impacto</label>
+                                    <select id="rice-impact" class="w-full p-2 rounded bg-gray-900 border border-gray-600"><option value="3">Massivo (3)</option><option value="2">Alto (2)</option><option value="1">Médio (1)</option><option value="0.5">Baixo (0.5)</option></select>
+                                </div>
+                                <div>
+                                    <label for="rice-confidence" class="block text-sm mb-1">Confiança</label>
+                                    <select id="rice-confidence" class="w-full p-2 rounded bg-gray-900 border border-gray-600"><option value="1">Alta (100%)</option><option value="0.8">Média (80%)</option><option value="0.5">Baixa (50%)</option></select>
+                                </div>
+                                <div>
+                                    <label for="rice-effort" class="block text-sm mb-1">Esforço (pessoa-semana)</label>
+                                    <input type="number" id="rice-effort" min="0.5" step="0.5" class="w-full p-2 rounded bg-gray-900 border border-gray-600">
+                                </div>
+                            </div>
+                            <div class="mt-3 text-center bg-gray-900/50 p-2 rounded-lg">
+                                <p class="text-sm text-gray-400" id="rice-formula-display">(R x I x C) / E = Score</p>
+                                <span class="text-lg font-bold">Score RICE: <span id="rice-score-display" class="text-xl text-green-400">0.0</span></span>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center mt-6 pt-4 border-t border-gray-700">
+                    <button type="button" id="delete-demand-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg hidden">Excluir</button>
+                    <div class="flex-grow text-right">
+                        <button type="button" id="cancel-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg mr-2">Cancelar</button>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- ========================================================================================= -->
+    <!--                                        SCRIPTS                                            -->
+    <!-- ========================================================================================= -->
+
+    <!-- SCRIPT 1: Inicialização do Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, 
+            collection, query, writeBatch, getDocs
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Carrega a configuração do Firebase fornecida pelo ambiente.
+        const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+        let firebaseConfig = {};
+        try {
+            firebaseConfig = JSON.parse(firebaseConfigString);
+        } catch (e) {
+            console.error("Erro ao decodificar a configuração do Firebase:", e);
+        }
+        
+        const isConfigMissing = !firebaseConfig || Object.keys(firebaseConfig).length === 0;
+
+        if (isConfigMissing) {
+            document.addEventListener('DOMContentLoaded', () => {
+                document.body.innerHTML = `<div class="bg-gray-900 text-white p-8 text-center h-screen flex flex-col justify-center items-center"><div class="bg-red-800 border border-red-600 p-10 rounded-lg shadow-2xl max-w-2xl"><h1 class="text-3xl font-bold mb-4">Erro de Configuração</h1><p class="text-lg">A configuração do Firebase não foi fornecida pelo ambiente de execução.</p></div></div>`;
+            });
+            throw new Error("Configuração do Firebase ausente no ambiente.");
+        } else {
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+            const auth = getAuth(app);
+            
+            // Disponibiliza as instâncias e funções do Firebase globalmente para o script principal
+            window.db = db;
+            window.auth = auth;
+            window.firebase = {
+                 doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, 
+                 collection, query, writeBatch, getDocs, signInAnonymously, 
+                 signInWithCustomToken, onAuthStateChanged
+            };
+        }
+    </script>
     
+    <!-- SCRIPT 2: Lógica Principal da Aplicação -->
     <script type="module">
         document.addEventListener('DOMContentLoaded', () => {
+            // Pega as instâncias do Firebase que foram inicializadas no script anterior
             const { db, auth, firebase } = window;
+
+            // Se o Firebase não inicializou, para a execução
             if (!db || !auth || !firebase) {
                 console.error("A inicialização do Firebase falhou. O aplicativo não pode continuar.");
                 return;
             }
-            const appId = 'gestaoequipe';
-            let tasksCollectionRef;
-            let configDocRef;
-            let unsubscribeTasks = () => {};
-            let unsubscribeConfig = () => {};
+            
+            // --- VARIÁVEIS DE ESTADO E CONFIGURAÇÃO ---
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaoequipe';
             const WIP_LIMIT = 5;
             let tasks = [];
             let allHeaders = [];
@@ -281,11 +622,22 @@
             let currentView = 'manager';
             let isManager = false;
             let userId = null;
-            let dataLoaded = false;
+            let dataLoaded = false; // Flag para controlar o primeiro carregamento
+
+            // Referências para as coleções no Firestore
+            let tasksCollectionRef;
+            let configDocRef;
+
+            // Funções para cancelar os listeners do Firestore quando o usuário deslogar
+            let unsubscribeTasks = () => {};
+            let unsubscribeConfig = () => {};
+            
             const defaultActivityCatalog = {
                 "Elaboração de OGs para novas obras em TAF (OLTC. BC e Reator)": { "time": 1.3, "process": "Tensão em regime permanente", "annualNeed": 200, "executionPercentage": 100, "role": "Eng" },
                 "Elaboração de OGs para RTs/BCs (plano 8.4) Revisão de OGS": { "time": 0.8, "process": "Tensão em regime permanente", "annualNeed": 402, "executionPercentage": 100, "role": "Eng/Tec" },
             };
+            
+            // Mapeamento de todos os elementos da interface para fácil acesso
             const elements = {
                 addDemandBtn: document.getElementById('add-demand-btn'),
                 importBtn: document.getElementById('import-btn'),
@@ -306,80 +658,249 @@
                 kanbanSortBy: document.getElementById('kanban-sort-by'),
                 kanbanSortDirection: document.getElementById('kanban-sort-direction'),
                 timeLogWeekSelector: document.getElementById('time-log-week-selector'),
-                catalog: {
-                    container: document.getElementById('catalog-table-container'),
-                    addBtn: document.getElementById('add-activity-btn'),
-                    modal: document.getElementById('catalog-edit-modal'),
-                    form: document.getElementById('catalog-edit-form'),
-                    title: document.getElementById('catalog-modal-title'),
-                    originalName: document.getElementById('original-activity-name'),
-                    editName: document.getElementById('edit-activity-name'),
-                    editProcess: document.getElementById('edit-activity-process'),
-                    editRole: document.getElementById('edit-activity-role'),
-                    editTime: document.getElementById('edit-activity-time'),
-                    editAnnualNeed: document.getElementById('edit-activity-annual-need'),
-                    editExecPercentage: document.getElementById('edit-activity-execution-percentage'),
-                    deleteBtn: document.getElementById('delete-activity-btn'),
-                    cancelBtn: document.getElementById('cancel-catalog-edit-btn')
-                },
-                hc: {
-                    hoursInput: document.getElementById('hc-hours-input'),
-                    productivityFactor: document.getElementById('hc-productivity-factor'),
-                    baseTotal: document.getElementById('hc-base-total'),
-                    currentTotal: document.getElementById('hc-current-total'),
-                    annualTotal: document.getElementById('hc-annual-total'),
-                    realTotal: document.getElementById('hc-real-total'),
-                    baseEng: document.getElementById('hc-base-eng'),
-                    currentEng: document.getElementById('hc-current-eng'),
-                    annualEng: document.getElementById('hc-annual-eng'),
-                    realEng: document.getElementById('hc-real-eng'),
-                    baseTec: document.getElementById('hc-base-tec'),
-                    currentTec: document.getElementById('hc-current-tec'),
-                    annualTec: document.getElementById('hc-annual-tec'),
-                    realTec: document.getElementById('hc-real-tec'),
-                },
+                catalog: { container: document.getElementById('catalog-table-container'), addBtn: document.getElementById('add-activity-btn'), modal: document.getElementById('catalog-edit-modal'), form: document.getElementById('catalog-edit-form'), title: document.getElementById('catalog-modal-title'), originalName: document.getElementById('original-activity-name'), editName: document.getElementById('edit-activity-name'), editProcess: document.getElementById('edit-activity-process'), editRole: document.getElementById('edit-activity-role'), editTime: document.getElementById('edit-activity-time'), editAnnualNeed: document.getElementById('edit-activity-annual-need'), editExecPercentage: document.getElementById('edit-activity-execution-percentage'), deleteBtn: document.getElementById('delete-activity-btn'), cancelBtn: document.getElementById('cancel-catalog-edit-btn') },
+                hc: { hoursInput: document.getElementById('hc-hours-input'), productivityFactor: document.getElementById('hc-productivity-factor'), baseTotal: document.getElementById('hc-base-total'), currentTotal: document.getElementById('hc-current-total'), annualTotal: document.getElementById('hc-annual-total'), realTotal: document.getElementById('hc-real-total'), baseEng: document.getElementById('hc-base-eng'), currentEng: document.getElementById('hc-current-eng'), annualEng: document.getElementById('hc-annual-eng'), realEng: document.getElementById('hc-real-eng'), baseTec: document.getElementById('hc-base-tec'), currentTec: document.getElementById('hc-current-tec'), annualTec: document.getElementById('hc-annual-tec'), realTec: document.getElementById('hc-real-tec'), },
                 effortAnalysisChartContainer: document.getElementById('effort-analysis-chart-container'),
                 efficiencyChartContainer: document.getElementById('efficiency-chart-container'),
-                kpis: {
-                    cycleTime: document.getElementById('kpi-cycle-time'),
-                    leadTime: document.getElementById('kpi-lead-time'),
-                    throughput: document.getElementById('kpi-throughput')
-                },
-                modal: {
-                    container: document.getElementById('demand-modal'),
-                    form: document.getElementById('demand-form'),
-                    title: document.getElementById('modal-title'),
-                    id: document.getElementById('demand-id'),
-                    status: document.getElementById('demand-status'),
-                    demandTitle: document.getElementById('demand-title'),
-                    responsible: document.getElementById('demand-responsible'),
-                    nucleus: document.getElementById('demand-nucleus'),
-                    description: document.getElementById('demand-description'),
-                    type: document.getElementById('demand-type'),
-                    completionDateWrapper: document.getElementById('completion-date-wrapper'),
-                    completionDate: document.getElementById('demand-completion-date'),
-                    originalDataContent: document.getElementById('original-data-content'),
-                    critScore: document.getElementById('crit-score'),
-                    critReclamacoes: document.getElementById('crit-reclamacoes'),
-                    critPrazo: document.getElementById('crit-prazo'),
-                    gut: {
-                        fields: document.getElementById('gut-fields'),
-                        g: document.getElementById('gut-g'), u: document.getElementById('gut-u'), t: document.getElementById('gut-t'),
-                        formula: document.getElementById('gut-formula-display'),
-                        score: document.getElementById('gut-score-display')
-                    },
-                    rice: {
-                        fields: document.getElementById('rice-fields'),
-                        reach: document.getElementById('rice-reach'), impact: document.getElementById('rice-impact'),
-                        confidence: document.getElementById('rice-confidence'), effort: document.getElementById('rice-effort'),
-                        formula: document.getElementById('rice-formula-display'),
-                        score: document.getElementById('rice-score-display')
-                    },
-                    closeBtn: document.getElementById('close-modal-btn'),
-                    cancelBtn: document.getElementById('cancel-btn'),
-                    deleteBtn: document.getElementById('delete-demand-btn')
+                kpis: { cycleTime: document.getElementById('kpi-cycle-time'), leadTime: document.getElementById('kpi-lead-time'), throughput: document.getElementById('kpi-throughput') },
+                modal: { container: document.getElementById('demand-modal'), form: document.getElementById('demand-form'), title: document.getElementById('modal-title'), id: document.getElementById('demand-id'), status: document.getElementById('demand-status'), demandTitle: document.getElementById('demand-title'), responsible: document.getElementById('demand-responsible'), nucleus: document.getElementById('demand-nucleus'), description: document.getElementById('demand-description'), type: document.getElementById('demand-type'), completionDateWrapper: document.getElementById('completion-date-wrapper'), completionDate: document.getElementById('demand-completion-date'), originalDataContent: document.getElementById('original-data-content'), critScore: document.getElementById('crit-score'), critReclamacoes: document.getElementById('crit-reclamacoes'), critPrazo: document.getElementById('crit-prazo'), gut: { fields: document.getElementById('gut-fields'), g: document.getElementById('gut-g'), u: document.getElementById('gut-u'), t: document.getElementById('gut-t'), formula: document.getElementById('gut-formula-display'), score: document.getElementById('gut-score-display') }, rice: { fields: document.getElementById('rice-fields'), reach: document.getElementById('rice-reach'), impact: document.getElementById('rice-impact'), confidence: document.getElementById('rice-confidence'), effort: document.getElementById('rice-effort'), formula: document.getElementById('rice-formula-display'), score: document.getElementById('rice-score-display') }, closeBtn: document.getElementById('close-modal-btn'), cancelBtn: document.getElementById('cancel-btn'), deleteBtn: document.getElementById('delete-demand-btn') }
+            };
+
+            const STATUS_OPTIONS = { triagem: "Caixa de Entrada", backlog: "Backlog Priorizado", fazer: "A Fazer", andamento: "Em Andamento", validacao: "Em Validação", concluido: "Concluído" };
+            const STATUS_TO_SHEET_MAP = { triagem: "criada", backlog: "backlog", fazer: "a fazer", andamento: "em andamento", validacao: "em validação", concluido: "concluído" };
+
+            const formatDate = (dateString) => {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) return dateString;
+                return date.toLocaleString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                }).replace(',', '');
+            };
+            
+            const handleImport = async (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const data = e.target.result;
+                    let workbook;
+                    try {
+                        workbook = XLSX.read(data, { type: 'binary', cellDates: true, codepage: 65001 });
+                    } catch (error) {
+                        console.error("Error parsing file:", error);
+                        alert("Erro ao ler o arquivo.");
+                        return;
+                    }
+
+                    const sheetName = workbook.SheetNames[0];
+                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                    
+                    const newTasks = jsonData.map((row, index) => {
+                         const statusMap = { "criada": "triagem", "em andamento": "andamento", "concluído": "concluido", "concluída": "concluido" };
+                         const sheetStatus = (row.Status || '').toLowerCase().trim();
+                         let status = statusMap[sheetStatus] || 'triagem';
+                        return {
+                            originalId: row.ID_REF,
+                            title: row.Título || 'Sem Título',
+                            description: row.Descrição || '',
+                            status: status,
+                            responsible: row['Atribuído a'] || '',
+                            createdAt: row.Criado_GD ? new Date(row.Criado_GD).toISOString() : new Date().toISOString(),
+                            originalData: row
+                        };
+                    });
+
+                    const batch = firebase.writeBatch(db);
+                    newTasks.forEach(task => {
+                        const newDocRef = firebase.doc(tasksCollectionRef);
+                        batch.set(newDocRef, task);
+                    });
+                    
+                    try {
+                        await batch.commit();
+                        alert(`${newTasks.length} demandas foram importadas para o Firebase com sucesso!`);
+                    } catch (error) {
+                        console.error("Erro ao importar para o Firebase:", error);
+                        alert("Ocorreu um erro ao salvar as demandas.");
+                    }
+                    
+                    elements.fileInput.value = '';
+                };
+                reader.readAsBinaryString(file);
+            };
+
+            const clearData = async () => {
+                if (window.confirm("Tem certeza que deseja limpar TODAS as demandas do banco de dados? Esta ação não pode ser desfeita.")) {
+                    try {
+                        const querySnapshot = await firebase.getDocs(tasksCollectionRef);
+                        const batch = firebase.writeBatch(db);
+                        querySnapshot.forEach(doc => {
+                            batch.delete(doc.ref);
+                        });
+                        await batch.commit();
+                        
+                        await firebase.setDoc(configDocRef, { 
+                            catalog: defaultActivityCatalog, 
+                            view: 'manager', 
+                            managers: [userId]
+                        });
+
+                        alert("Todos os dados foram limpos do Firebase.");
+                    } catch (error) {
+                        console.error("Erro ao limpar dados:", error);
+                        alert("Ocorreu um erro ao limpar os dados.");
+                    }
                 }
             };
+
+            const handleFormSubmit = async (e) => {
+                e.preventDefault();
+                const { modal } = elements;
+                const id = modal.id.value;
+                
+                const taskData = {
+                    title: modal.demandTitle.value,
+                    status: modal.status.value,
+                    responsible: modal.responsible.value,
+                };
+
+                try {
+                    if (id) {
+                        const taskDocRef = firebase.doc(db, tasksCollectionRef.path, id);
+                        await firebase.updateDoc(taskDocRef, taskData);
+                    } else {
+                        await firebase.addDoc(tasksCollectionRef, {
+                            ...taskData,
+                            createdAt: new Date().toISOString()
+                        });
+                    }
+                    closeModal();
+                } catch (error) {
+                    console.error("Erro ao salvar demanda:", error);
+                    alert("Não foi possível salvar a demanda.");
+                }
+            };
+            
+            const populateGlobalFilters = () => {
+                const filtersContainer = elements.globalFilters;
+                filtersContainer.innerHTML = '';
+                
+                teamMembers = [...new Set(tasks.map(t => t.responsible).filter(Boolean))].sort();
+
+                const filterConfigs = [
+                    { key: 'ID_REF', label: 'ID (REF)', type: 'text' },
+                    { key: 'status', label: 'Status Kanban', values: Object.keys(STATUS_OPTIONS) },
+                    { key: 'responsible', label: 'Responsável', values: teamMembers },
+                    { key: 'Núcleo', label: 'Núcleo' },
+                ];
+
+                filterConfigs.forEach(config => {
+                    const filterWrapper = document.createElement('div');
+                    
+                    if (config.type === 'text') {
+                        filterWrapper.innerHTML = `<label for="filter-${config.key}" class="block text-xs font-medium text-gray-400 mb-1">${config.label}</label><input type="text" id="filter-${config.key}" data-filter-key="${config.key}" class="global-filter w-full p-2 rounded bg-gray-700 border border-gray-600 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">`;
+                    } else {
+                        const values = config.values || [...new Set(tasks.map(t => t.originalData?.[config.key]).filter(Boolean))].sort();
+                        if (values.length === 0) return;
+
+                        const options = config.key === 'status'
+                            ? values.map(val => `<option value="${val}">${STATUS_OPTIONS[val]}</option>`).join('')
+                            : values.map(val => `<option value="${val}">${val}</option>`).join('');
+
+                        filterWrapper.innerHTML = `<label for="filter-${config.key}" class="block text-xs font-medium text-gray-400 mb-1">${config.label}</label><select id="filter-${config.key}" data-filter-key="${config.key}" class="global-filter w-full p-2 rounded bg-gray-700 border border-gray-600 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"><option value="">Todos</option>${options}</select>`;
+                    }
+                    filtersContainer.appendChild(filterWrapper);
+                });
+            };
+
+            const switchTab = (activeTabId) => {
+                Object.values(elements.views).forEach(view => view.classList.add('hidden'));
+                Object.values(elements.tabs).forEach(tab => tab.classList.remove('active'));
+                elements.views[activeTabId].classList.remove('hidden');
+                elements.tabs[activeTabId].classList.add('active');
+                renderActiveTabView();
+            };
+
+            const renderActiveTabView = () => {
+                const activeTab = document.querySelector('.tab-btn.active').id.replace('tab-', '');
+                const filteredTasks = tasks; 
+                if (activeTab === 'dashboard') renderDashboard(filteredTasks);
+                else if (activeTab === 'demandas') renderTable(filteredTasks);
+                else if (activeTab === 'kanban') renderBoard(filteredTasks);
+            };
+
+            const renderDashboard = (tasksToRender) => {
+                // Lógica de renderização do dashboard
+            };
+
+            const renderTable = (tasksToRender) => {
+                // Lógica de renderização da tabela
+            };
+
+            const renderBoard = (tasksToRender) => {
+                elements.kanbanColumns.forEach(col => col.innerHTML = '');
+                tasksToRender.forEach(task => {
+                    const column = document.getElementById(`column-${task.status}`);
+                    if (column) column.innerHTML += `<div class="kanban-card bg-gray-700 p-2 rounded shadow">${task.title}</div>`;
+                });
+            };
+            
+            const closeModal = () => {
+                elements.modal.container.classList.add('hidden');
+                elements.modal.container.classList.remove('flex');
+            };
+            
+            const openModal = (taskId = null) => {
+                // Lógica para abrir modal
+            };
+
+            const loadDataAndInitApp = () => {
+                unsubscribeConfig = firebase.onSnapshot(configDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const configData = docSnap.data();
+                        activityCatalog = configData.catalog || defaultActivityCatalog;
+                    } else {
+                        firebase.setDoc(configDocRef, { catalog: defaultActivityCatalog, managers: [userId] });
+                    }
+                });
+
+                unsubscribeTasks = firebase.onSnapshot(tasksCollectionRef, (querySnapshot) => {
+                    const newTasks = [];
+                    querySnapshot.forEach((doc) => {
+                        newTasks.push({ id: doc.id, ...doc.data() });
+                    });
+                    tasks = newTasks;
+                    
+                    if (!dataLoaded) {
+                        populateGlobalFilters();
+                        dataLoaded = true;
+                    }
+                    
+                    renderActiveTabView();
+                });
+
+                setupEventListeners();
+                startUITimer();
+            };
+
+             const setupEventListeners = () => {
+                Object.keys(elements.tabs).forEach(key => elements.tabs[key].addEventListener('click', () => switchTab(key)));
+                elements.addDemandBtn.addEventListener('click', () => openModal());
+                elements.importBtn.addEventListener('click', () => elements.fileInput.click());
+                elements.fileInput.addEventListener('change', handleImport);
+                elements.clearDataBtn.addEventListener('click', clearData);
+                elements.modal.form.addEventListener('submit', handleFormSubmit);
+            };
+
+            const startUITimer = () => {
+                 clearInterval(timerInterval);
+                 timerInterval = setInterval(() => {
+                 }, 1000);
+            };
+
             const initFirebase = async () => {
                 firebase.onAuthStateChanged(auth, async (user) => {
                     if (user) {
@@ -390,18 +911,10 @@
                         configDocRef = firebase.doc(db, `artifacts/${appId}/public/data/appConfig/main`);
 
                         const configSnap = await firebase.getDoc(configDocRef);
-                        if (configSnap.exists() && configSnap.data().managers?.includes(userId)) {
-                            isManager = true;
-                        } else {
-                            if (!configSnap.exists()) {
-                                 await firebase.setDoc(configDocRef, { managers: [userId] });
-                                 isManager = true;
-                            } else {
-                                isManager = false;
-                            }
-                        }
-
+                        isManager = configSnap.exists() && configSnap.data().managers?.includes(userId);
+                        
                         elements.viewToggleContainer.style.display = isManager ? 'flex' : 'none';
+
                         loadDataAndInitApp();
 
                     } else {
@@ -419,12 +932,13 @@
                     }
                 } catch (error) {
                     console.error("Erro na autenticação:", error);
-                    alert("Não foi possível conectar ao sistema. Verifique sua conexão e tente novamente.");
+                    alert("Não foi possível conectar ao sistema.");
                 }
             };
             initFirebase();
         });
     </script>
+
 </body>
 </html>
 
