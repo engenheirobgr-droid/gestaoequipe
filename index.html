@@ -561,29 +561,38 @@
 
 <script type="module">
     // Importações do Firebase
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
     import { 
         getFirestore, collection, doc, onSnapshot, 
         addDoc, setDoc, deleteDoc, writeBatch, query, getDocs
-    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
 
     // --- CONFIGURAÇÃO DO FIREBASE ---
-    // Utiliza variáveis de ambiente fornecidas pela plataforma
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const userProvidedConfig = {
+        apiKey: "AIzaSyB3jYiqJ2GO_N6tVmBQcxXo630B4ks0zzg",
+        authDomain: "gestao-de-equipe.firebaseapp.com",
+        projectId: "gestao-de-equipe",
+        storageBucket: "gestao-de-equipe.appspot.com",
+        messagingSenderId: "545987735171",
+        appId: "1:545987735171:web:ad1c63e748969a497e35b6"
+    };
+
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : userProvidedConfig;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+
 
     // Inicialização do Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // Referências das Coleções com base no App ID
-    const rootCollectionPath = `artifacts/${appId}/public/data`;
-    const tasksCollection = collection(db, `${rootCollectionPath}/tasks`);
-    const catalogCollection = collection(db, `${rootCollectionPath}/activityCatalog`);
-    const historyCollection = collection(db, `${rootCollectionPath}/history`);
-    const timeLogCollection = collection(db, `${rootCollectionPath}/timeLog`);
+    // Referências das Coleções
+    const basePath = `artifacts/${appId}/public/data`;
+    const tasksCollection = collection(db, `${basePath}/tasks`);
+    const catalogCollection = collection(db, `${basePath}/activityCatalog`);
+    const historyCollection = collection(db, `${basePath}/history`);
+    const timeLogCollection = collection(db, `${basePath}/timeLog`);
 
     document.addEventListener('DOMContentLoaded', () => {
         // --- CONFIGURAÇÕES E ESTADO GLOBAL ---
@@ -2311,7 +2320,7 @@
         const init = () => {
             showLoading("Autenticando e conectando ao banco de dados...");
 
-            onAuthStateChanged(auth, async (user) => {
+            const handleAuth = async (user) => {
                 if (user) {
                     console.log("Usuário autenticado:", user.uid);
                     
@@ -2338,24 +2347,26 @@
                     setupEventListeners();
                     hideLoading();
                 }
-            });
+            };
 
-            // Lógica de autenticação movida para fora do onAuthStateChanged para ser executada apenas uma vez
+            onAuthStateChanged(auth, handleAuth);
+
             const performAuth = async () => {
                 if (auth.currentUser) {
-                    return; // Já autenticado
-                }
+                    handleAuth(auth.currentUser);
+                    return;
+                };
+
                 try {
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        console.log("Autenticando com token customizado...");
                         await signInWithCustomToken(auth, __initial_auth_token);
                     } else {
-                        console.log("Nenhum usuário. Autenticando anonimamente...");
+                        console.log("Nenhum token. Autenticando anonimamente...");
                         await signInAnonymously(auth);
                     }
                 } catch (error) {
                     console.error("Erro na autenticação:", error);
-                    alert("Falha ao conectar. Verifique as configurações do Firebase e se as credenciais estão corretas. O erro mais comum é uma API Key inválida.");
+                    alert("Falha ao conectar. Verifique as configurações do Firebase, as credenciais e as regras de segurança.");
                     hideLoading();
                 }
             };
