@@ -11,8 +11,6 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    
-    <!-- Bloco de Estilos CSS -->
     <style>
         body { font-family: 'Inter', sans-serif; }
         .kanban-column { min-height: 200px; }
@@ -27,17 +25,31 @@
         .tooltip-container { position: relative; display: inline-flex; align-items: center; }
         .tooltip { visibility: hidden; opacity: 0; transition: opacity 0.2s; }
         .tooltip-container:hover .tooltip { visibility: visible; opacity: 1; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
 
-    <!-- Estrutura HTML completa do seu app (Cabeçalho, Navegação, Conteúdo das Abas, Modais, etc.) -->
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-70 flex-col hidden items-center justify-center z-[100]">
+        <div class="loader"></div>
+        <p id="loading-message" class="mt-4 text-lg">Carregando...</p>
+    </div>
+
     <!-- Cabeçalho -->
     <header class="bg-gray-800 p-4 shadow-md sticky top-0 z-20">
         <div class="container mx-auto flex justify-between items-center flex-wrap">
             <div class="flex items-center space-x-4">
                 <h1 class="text-2xl font-bold">Gestão de Engenharia</h1>
-                <div id="view-toggle-container" class="flex items-center text-sm pt-1">
+                <div class="flex items-center text-sm pt-1">
                     <span class="mr-2 text-gray-400">Visão Equipe</span>
                     <label for="view-toggle" class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="view-toggle" class="sr-only peer">
@@ -89,7 +101,7 @@
             </button>
             <button id="tab-hc" class="tab-btn py-4 px-1 border-b-2 border-transparent text-gray-400 hover:text-white transition flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656-.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
                 <span>Head Count (HC)</span>
             </button>
@@ -372,7 +384,7 @@
     <div id="catalog-edit-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-50">
         <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-lg">
             <form id="catalog-edit-form">
-                <input type="hidden" id="original-activity-name">
+                <input type="hidden" id="catalog-activity-id">
                 <h2 id="catalog-modal-title" class="text-2xl font-bold mb-4">Editar Atividade</h2>
                 <div class="space-y-4">
                     <div>
@@ -547,398 +559,1813 @@
         </div>
     </div>
 
+<script type="module">
+    // Importações do Firebase
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { 
+        getFirestore, collection, doc, onSnapshot, 
+        addDoc, setDoc, deleteDoc, writeBatch, query, getDocs
+    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    <!-- ========================================================================================= -->
-    <!--                                        SCRIPTS                                            -->
-    <!-- ========================================================================================= -->
+    // --- CONFIGURAÇÃO DO FIREBASE ---
+    // Utiliza variáveis de ambiente fornecidas pela plataforma
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-    <!-- SCRIPT 1: Inicialização do Firebase -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, 
-            collection, query, writeBatch, getDocs
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    // Inicialização do Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-        // Carrega a configuração do Firebase fornecida pelo ambiente.
-        const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
-        let firebaseConfig = {};
-        try {
-            firebaseConfig = JSON.parse(firebaseConfigString);
-        } catch (e) {
-            console.error("Erro ao decodificar a configuração do Firebase:", e);
-        }
-        
-        const isConfigMissing = !firebaseConfig || Object.keys(firebaseConfig).length === 0;
+    // Referências das Coleções com base no App ID
+    const rootCollectionPath = `artifacts/${appId}/public/data`;
+    const tasksCollection = collection(db, `${rootCollectionPath}/tasks`);
+    const catalogCollection = collection(db, `${rootCollectionPath}/activityCatalog`);
+    const historyCollection = collection(db, `${rootCollectionPath}/history`);
+    const timeLogCollection = collection(db, `${rootCollectionPath}/timeLog`);
 
-        if (isConfigMissing) {
-            document.addEventListener('DOMContentLoaded', () => {
-                document.body.innerHTML = `<div class="bg-gray-900 text-white p-8 text-center h-screen flex flex-col justify-center items-center"><div class="bg-red-800 border border-red-600 p-10 rounded-lg shadow-2xl max-w-2xl"><h1 class="text-3xl font-bold mb-4">Erro de Configuração</h1><p class="text-lg">A configuração do Firebase não foi fornecida pelo ambiente de execução.</p></div></div>`;
-            });
-            throw new Error("Configuração do Firebase ausente no ambiente.");
-        } else {
-            const app = initializeApp(firebaseConfig);
-            const db = getFirestore(app);
-            const auth = getAuth(app);
-            
-            // Disponibiliza as instâncias e funções do Firebase globalmente para o script principal
-            window.db = db;
-            window.auth = auth;
-            window.firebase = {
-                 doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, 
-                 collection, query, writeBatch, getDocs, signInAnonymously, 
-                 signInWithCustomToken, onAuthStateChanged
-            };
-        }
-    </script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- CONFIGURAÇÕES E ESTADO GLOBAL ---
+        const WIP_LIMIT = 5;
+        let tasks = [];
+        let history = [];
+        let timeLog = [];
+        let activityCatalog = []; // Agora é um array de objetos {id, name, data}
+        let allHeaders = [];
+        let duplicateIdList = [];
+        let teamMembers = [];
+        let draggedTaskId = null;
+        let chartObjects = {};
+        let currentSort = { by: 'score', direction: 'desc' };
+        let timerInterval = null;
+        let currentView = 'manager';
+        let unsubscribeTasks, unsubscribeCatalog, unsubscribeHistory, unsubscribeTimeLog;
     
-    <!-- SCRIPT 2: Lógica Principal da Aplicação -->
-    <script type="module">
-        document.addEventListener('DOMContentLoaded', () => {
-            // Pega as instâncias do Firebase que foram inicializadas no script anterior
-            const { db, auth, firebase } = window;
+        const defaultActivityCatalog = {
+            "Elaboração de OGs para novas obras em TAF (OLTC. BC e Reator)": { "time": 1.3, "process": "Tensão em regime permanente", "annualNeed": 200, "executionPercentage": 100, "role": "Eng" },
+            "Elaboração de OGs para RTs/BCs (plano 8.4) Revisão de OGS": { "time": 0.8, "process": "Tensão em regime permanente", "annualNeed": 402, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Indicação e cobrança de pontos para o RUA": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 150, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Indicação de prioridades de RTs/BCs": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "Estudar reincidência de queimas de equipamento Acompanhamento, cobrança de RIME etc": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
+            "Controle de Fator de Potência PSU": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 24, "executionPercentage": 100, "role": "Eng" },
+            "Analise de instalação de RT e melhores práticas": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
+            "Realocação de equipamento e estudo para novos pontos de instalação": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 88, "executionPercentage": 100, "role": "Eng" },
+            "Validação da memória de massa após aplicação da OG": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 402, "executionPercentage": 100, "role": "Tec" },
+            "Diagnóstico de qualidade do produto": { "time": 2.6, "process": "Gestão de Qualidade do produto", "annualNeed": 812, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Suporte técnico para equipes de campo": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 132, "executionPercentage": 100, "role": "Tec" },
+            "Configuração e Gestão de Qualimetro": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 36, "executionPercentage": 100, "role": "Tec" },
+            "Gestão e acompanhamento de ações de mitigação": { "time": 4, "process": "Gestão de Qualidade do produto", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Visita à clientes": { "time": 20, "process": "Gestão de Qualidade do produto", "annualNeed": 30, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Reunião com Clientes": { "time": 0.8, "process": "Gestão de Qualidade do produto", "annualNeed": 144, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Controle e gestão das medições permanentes": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 44, "executionPercentage": 100, "role": "Tec" },
+            "Elaboração de relatório com diagnóstico de qualidade": { "time": 1.5, "process": "Gestão de Qualidade do produto", "annualNeed": 700, "executionPercentage": 100, "role": "Eng" },
+            "Planos especiais para clientes (indústrias, oeste, etc.)": { "time": 0.5, "process": "Gestão de Qualidade do produto", "annualNeed": 1300, "executionPercentage": 100, "role": "Eng" },
+            "Atualização do Carregamento de AL, Trafos e LT": { "time": 2, "process": "Gestão de Qualidade do produto", "annualNeed": 12, "executionPercentage": 100, "role": "Tec" },
+            "Diagnóstico para SHD": { "time": 2.6, "process": "Gestão de Qualidade do produto", "annualNeed": 100, "executionPercentage": 100, "role": "Eng" },
+            "Análise e otimização dos alimentadores envolvidos nos planos especiais": { "time": 4, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 348, "executionPercentage": 100, "role": "Eng" },
+            "Ressaca dos planos": { "time": 16, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 3, "executionPercentage": 100, "role": "Eng" },
+            "Visita à região": { "time": 20, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 30, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Análise e otimização dos Trafos envolvidos nos planos especiais": { "time": 1, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 90, "executionPercentage": 100, "role": "Eng" },
+            "Análise e otimização de LDs envolvidos nos planos especiais": { "time": 1, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 50, "executionPercentage": 100, "role": "Eng" },
+            "Gestão e acompanhamento do plano de ação": { "time": 4, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 112, "executionPercentage": 100, "role": "Eng" },
+            "Padronizar analise e processos": { "time": 8, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
+            "Reuniões de supervisão": { "time": 16, "process": "Processos", "annualNeed": 88, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Reunião de equipe": { "time": 16, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Reunião Gerencial (Dese etc.)": { "time": 4, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Workshop Super e Gerencia": { "time": 32, "process": "Processos", "annualNeed": 5, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Criar fluxo dos processos": { "time": 16, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Treinamento/Workshop/benchmarking": { "time": 32, "process": "Processos", "annualNeed": 5, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Congresso e Seminários": { "time": 24, "process": "Processos", "annualNeed": 8, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Processos de Inovação (Inovar)": { "time": 10, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Analise de contigência N-1 (quadrimestral)": { "time": 8, "process": "Quadrimestral", "annualNeed": 36, "executionPercentage": 100, "role": "Eng" },
+            "Elaboração de Relatório Quadrimestral": { "time": 12, "process": "Quadrimestral", "annualNeed": 36, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Pontos de SEP": { "time": 0.5, "process": "Quadrimestral", "annualNeed": 24, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Manutenção de Deck": { "time": 2, "process": "Quadrimestral", "annualNeed": 24, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Criação do Deck": { "time": 16, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "ERAC": { "time": 1, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "Atendimento a Inequações ONS": { "time": 4, "process": "Quadrimestral", "annualNeed": 6, "executionPercentage": 100, "role": "Eng" },
+            "Indicação de MUST em contingència": { "time": 1, "process": "Quadrimestral", "annualNeed": 48, "executionPercentage": 100, "role": "Eng" },
+            "Suporte para Análise de RCA": { "time": 1, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "Planejar o Recurso para o próximo ano": { "time": 24, "process": "Plano 8.4", "annualNeed": 1, "executionPercentage": 100, "role": "Eng" },
+            "Acompanhar a utilização do recurso no ano corrente": { "time": 2, "process": "Plano 8.4", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "Priorizar aplicação do recurso para demandas não planejadas": { "time": 1.5, "process": "Plano 8.4", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "Gestão dos entrantes judiciais": { "time": 0.33, "process": "VNT", "annualNeed": 40, "executionPercentage": 100, "role": "Eng" },
+            "Elaboração da carteira de medição": { "time": 0.66, "process": "VNT", "annualNeed": 48, "executionPercentage": 100, "role": "Tec" },
+            "Lançamento das medições no SRT": { "time": 0.13, "process": "VNT", "annualNeed": 2850, "executionPercentage": 100, "role": "Tec" },
+            "Analise comp comercial": { "time": 0.33, "process": "VNT", "annualNeed": 2850, "executionPercentage": 100, "role": "Eng" },
+            "Acompanhamento ANEEL/Ouvidoria": { "time": 1.33, "process": "VNT", "annualNeed": 210, "executionPercentage": 100, "role": "Tec" },
+            "Gerar Nota de Obra": { "time": 0.16, "process": "VNT", "annualNeed": 860, "executionPercentage": 100, "role": "Tec" },
+            "Acompanhamento da carteira de medição": { "time": 2, "process": "VNT", "annualNeed": 24, "executionPercentage": 100, "role": "Tec" },
+            "Analise de comp técnica": { "time": 0.66, "process": "VNT", "annualNeed": 2330, "executionPercentage": 100, "role": "Eng" },
+            "Gestão de investimento de Obras X Compensação": { "time": 0.66, "process": "VNT", "annualNeed": 1240, "executionPercentage": 100, "role": "Eng" },
+            "Gestão dos med Graf": { "time": 1.5, "process": "VNT", "annualNeed": 48, "executionPercentage": 100, "role": "Tec" },
+            "Report Semanal do VNT": { "time": 0.33, "process": "VNT", "annualNeed": 192, "executionPercentage": 100, "role": "Eng" },
+            "Demandas Ocasionais": { "time": 2, "process": "Outros", "annualNeed": 88, "executionPercentage": 100, "role": "Eng/Tec" }
+        };
 
-            // Se o Firebase não inicializou, para a execução
-            if (!db || !auth || !firebase) {
-                console.error("A inicialização do Firebase falhou. O aplicativo não pode continuar.");
+        const showLoading = (message = 'Carregando...') => {
+            document.getElementById('loading-message').textContent = message;
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            document.getElementById('loading-overlay').classList.add('flex');
+        };
+
+        const hideLoading = () => {
+            document.getElementById('loading-overlay').classList.add('hidden');
+            document.getElementById('loading-overlay').classList.remove('flex');
+        };
+
+        // --- ELEMENTOS DO DOM ---
+        const elements = {
+            addDemandBtn: document.getElementById('add-demand-btn'),
+            importBtn: document.getElementById('import-btn'),
+            exportBtn: document.getElementById('export-btn'),
+            fileInput: document.getElementById('file-input'),
+            clearFiltersBtn: document.getElementById('clear-filters-btn'),
+            clearDataBtn: document.getElementById('clear-data-btn'),
+            viewToggle: document.getElementById('view-toggle'),
+            tabs: { dashboard: document.getElementById('tab-dashboard'), demandas: document.getElementById('tab-demandas'), kanban: document.getElementById('tab-kanban'), catalogo: document.getElementById('tab-catalogo'), hc: document.getElementById('tab-hc') },
+            views: { dashboard: document.getElementById('view-dashboard'), demandas: document.getElementById('view-demandas'), kanban: document.getElementById('view-kanban'), catalogo: document.getElementById('view-catalogo'), hc: document.getElementById('view-hc') },
+            tableContainer: document.getElementById('table-container'),
+            duplicateWarning: document.getElementById('duplicate-warning'),
+            duplicateMessage: document.getElementById('duplicate-message'),
+            kanbanBoard: document.getElementById('kanban-board'),
+            kanbanColumns: document.querySelectorAll('.kanban-column'),
+            globalFilters: document.getElementById('global-filters'),
+            kanbanSortBy: document.getElementById('kanban-sort-by'),
+            kanbanSortDirection: document.getElementById('kanban-sort-direction'),
+            timeLogWeekSelector: document.getElementById('time-log-week-selector'),
+            catalog: {
+                container: document.getElementById('catalog-table-container'),
+                addBtn: document.getElementById('add-activity-btn'),
+                modal: document.getElementById('catalog-edit-modal'),
+                form: document.getElementById('catalog-edit-form'),
+                title: document.getElementById('catalog-modal-title'),
+                activityId: document.getElementById('catalog-activity-id'),
+                editName: document.getElementById('edit-activity-name'),
+                editProcess: document.getElementById('edit-activity-process'),
+                editRole: document.getElementById('edit-activity-role'),
+                editTime: document.getElementById('edit-activity-time'),
+                editAnnualNeed: document.getElementById('edit-activity-annual-need'),
+                editExecPercentage: document.getElementById('edit-activity-execution-percentage'),
+                deleteBtn: document.getElementById('delete-activity-btn'),
+                cancelBtn: document.getElementById('cancel-catalog-edit-btn')
+            },
+            hc: {
+                hoursInput: document.getElementById('hc-hours-input'),
+                productivityFactor: document.getElementById('hc-productivity-factor'),
+                baseTotal: document.getElementById('hc-base-total'),
+                currentTotal: document.getElementById('hc-current-total'),
+                annualTotal: document.getElementById('hc-annual-total'),
+                realTotal: document.getElementById('hc-real-total'),
+                baseEng: document.getElementById('hc-base-eng'),
+                currentEng: document.getElementById('hc-current-eng'),
+                annualEng: document.getElementById('hc-annual-eng'),
+                realEng: document.getElementById('hc-real-eng'),
+                baseTec: document.getElementById('hc-base-tec'),
+                currentTec: document.getElementById('hc-current-tec'),
+                annualTec: document.getElementById('hc-annual-tec'),
+                realTec: document.getElementById('hc-real-tec'),
+            },
+            effortAnalysisChartContainer: document.getElementById('effort-analysis-chart-container'),
+            efficiencyChartContainer: document.getElementById('efficiency-chart-container'),
+            kpis: {
+                cycleTime: document.getElementById('kpi-cycle-time'),
+                leadTime: document.getElementById('kpi-lead-time'),
+                throughput: document.getElementById('kpi-throughput')
+            },
+            modal: {
+                container: document.getElementById('demand-modal'),
+                form: document.getElementById('demand-form'),
+                title: document.getElementById('modal-title'),
+                id: document.getElementById('demand-id'),
+                status: document.getElementById('demand-status'),
+                demandTitle: document.getElementById('demand-title'),
+                responsible: document.getElementById('demand-responsible'),
+                nucleus: document.getElementById('demand-nucleus'),
+                description: document.getElementById('demand-description'),
+                type: document.getElementById('demand-type'),
+                completionDateWrapper: document.getElementById('completion-date-wrapper'),
+                completionDate: document.getElementById('demand-completion-date'),
+                originalDataContent: document.getElementById('original-data-content'),
+                critScore: document.getElementById('crit-score'),
+                critReclamacoes: document.getElementById('crit-reclamacoes'),
+                critPrazo: document.getElementById('crit-prazo'),
+                gut: {
+                    fields: document.getElementById('gut-fields'),
+                    g: document.getElementById('gut-g'), u: document.getElementById('gut-u'), t: document.getElementById('gut-t'),
+                    formula: document.getElementById('gut-formula-display'),
+                    score: document.getElementById('gut-score-display')
+                },
+                rice: {
+                    fields: document.getElementById('rice-fields'),
+                    reach: document.getElementById('rice-reach'), impact: document.getElementById('rice-impact'),
+                    confidence: document.getElementById('rice-confidence'), effort: document.getElementById('rice-effort'),
+                    formula: document.getElementById('rice-formula-display'),
+                    score: document.getElementById('rice-score-display')
+                },
+                closeBtn: document.getElementById('close-modal-btn'),
+                cancelBtn: document.getElementById('cancel-btn'),
+                deleteBtn: document.getElementById('delete-demand-btn')
+            }
+        };
+
+        const STATUS_OPTIONS = {
+            triagem: "Caixa de Entrada", backlog: "Backlog Priorizado", fazer: "A Fazer",
+            andamento: "Em Andamento", validacao: "Em Validação", concluido: "Concluído"
+        };
+
+        const STATUS_TO_SHEET_MAP = {
+            triagem: "criada", backlog: "backlog", fazer: "a fazer",
+            andamento: "em andamento", validacao: "em validação", concluido: "concluído"
+        };
+        
+        const formatDate = (dateStringOrTimestamp) => {
+            if (!dateStringOrTimestamp) return '';
+            let date;
+            if (typeof dateStringOrTimestamp === 'string') {
+                date = new Date(dateStringOrTimestamp);
+            } else if (dateStringOrTimestamp.seconds) { // Firebase Timestamp object
+                date = dateStringOrTimestamp.toDate();
+            } else {
+                return '';
+            }
+
+            if (isNaN(date.getTime())) return '';
+            
+            return date.toLocaleString('pt-BR', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            }).replace(',', '');
+        };
+        
+        const formatTime = (ms) => {
+            if (typeof ms !== 'number' || ms < 0) return '00:00:00';
+            const totalSeconds = Math.floor(ms / 1000);
+            const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+            const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+            const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
+        };
+
+        const handleImport = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            showLoading('Importando planilha...');
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const data = e.target.result;
+                let workbook;
+                
+                try {
+                    workbook = XLSX.read(data, { type: 'binary', cellDates: true, codepage: 65001 });
+                } catch (error) {
+                    console.error("Error parsing file:", error);
+                    alert("Erro ao ler o arquivo. Certifique-se de que é um formato Excel, CSV ou IQY válido e que não está corrompido.");
+                    hideLoading();
+                    return;
+                }
+
+                const sheetName = workbook.SheetNames[0];
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                
+                elements.duplicateWarning.classList.add('hidden');
+                duplicateIdList = [];
+                const idMap = new Map();
+                jsonData.forEach(row => {
+                    const id = row.ID_REF;
+                    if (id) {
+                        if (idMap.has(id)) idMap.set(id, idMap.get(id) + 1);
+                        else idMap.set(id, 1);
+                    }
+                });
+
+                idMap.forEach((count, id) => { if (count > 1) duplicateIdList.push(id); });
+
+                if (duplicateIdList.length > 0) {
+                    elements.duplicateMessage.textContent = ` Foram encontrados IDs duplicados na sua planilha: ${duplicateIdList.join(', ')}.`;
+                    elements.duplicateWarning.classList.remove('hidden');
+                }
+                
+                const headerSet = new Set();
+                jsonData.forEach(row => Object.keys(row).forEach(key => headerSet.add(key)));
+                allHeaders = Array.from(headerSet);
+
+                const statusMap = { "criada": "triagem", "em andamento": "andamento", "concluído": "concluido", "concluída": "concluido" };
+                const parseGUTValue = (gutString) => {
+                    if (!gutString || typeof gutString !== 'string') return 0;
+                    const match = gutString.match(/\((\d+)\)/);
+                    return match ? parseInt(match[1], 10) : 0;
+                };
+                
+                const catalogMap = activityCatalog.reduce((acc, item) => {
+                    acc[item.name] = item.data;
+                    return acc;
+                }, {});
+
+                const batch = writeBatch(db);
+                const newTasks = jsonData.map((row, index) => {
+                    const sheetStatus = (row.Status || '').toLowerCase().trim();
+                    let status = statusMap[sheetStatus] || 'triagem';
+
+                    const g = parseGUTValue(row['Gravidade (GUT)']);
+                    const u = parseGUTValue(row['Urgência (GUT)']);
+                    const t = parseGUTValue(row['Tendência (GUT)']);
+                    const calculatedGUT = g * u * t;
+
+                    if (status === 'triagem' && calculatedGUT > 0) status = 'backlog';
+                    
+                    const activityName = row['Atividade'];
+                    const catalogEntry = catalogMap[activityName] || { time: 0, process: 'Não Definido', role: 'N/A' };
+                    
+                    const createdAt = row.Criado_GD ? new Date(row.Criado_GD) : new Date();
+
+                    const taskData = {
+                        originalId: String(row.ID_REF || `manual-${index}`),
+                        title: row.Título || 'Sem Título',
+                        description: row.Descrição || '',
+                        status: status,
+                        responsible: row['Atribuído a'] || '',
+                        createdAt: createdAt.toISOString(),
+                        scoreGUT: calculatedGUT,
+                        demandType: 'problema',
+                        originalData: row,
+                        completedAt: null,
+                        startedAt: null,
+                        gut: { g, u, t },
+                        reclamacoes30d: row['Nº de Reclamações dos últimos 30 dias'] || 0,
+                        nucleus: row['Núcleo'] || '',
+                        timeSpent: 0,
+                        isTiming: false,
+                        lastStartTime: null,
+                        playCount: 0,
+                        expectedTime: catalogEntry.time,
+                        process: catalogEntry.process,
+                        role: catalogEntry.role
+                    };
+                    
+                    if (status === 'andamento' || status === 'validacao' || status === 'concluido') {
+                        taskData.startedAt = taskData.createdAt;
+                    }
+
+                    if (status === 'concluido' && row['Data de Conclusão']) {
+                        const completionDate = new Date(row['Data de Conclusão']);
+                        if (!isNaN(completionDate.getTime())) {
+                            taskData.completedAt = completionDate.toISOString();
+                        }
+                    }
+                    
+                    const newDocRef = doc(tasksCollection);
+                    batch.set(newDocRef, taskData);
+                    return { ...taskData, id: newDocRef.id };
+                });
+                
+                try {
+                    await batch.commit();
+                    alert(`${newTasks.length} demandas foram importadas com sucesso!`);
+                    // Não precisa chamar renderizações aqui, o onSnapshot fará isso.
+                    switchTab('dashboard');
+                } catch (error) {
+                    console.error("Erro ao importar demandas para o Firebase:", error);
+                    alert("Ocorreu um erro durante a importação. Verifique o console para mais detalhes.");
+                } finally {
+                    hideLoading();
+                    elements.fileInput.value = '';
+                }
+            };
+            reader.readAsBinaryString(file);
+        };
+
+        const handleExport = () => {
+            if (tasks.length === 0) {
+                alert("Não há dados para exportar. Importe uma planilha primeiro.");
+                return;
+            }
+
+            const msPerDay = 1000 * 60 * 60 * 24;
+            
+            const dataToExport = tasks.map(task => {
+                const exportRow = { ...task.originalData };
+
+                if (task.createdAt) {
+                    const startDate = new Date(task.createdAt);
+                    const endDate = task.completedAt ? new Date(task.completedAt) : new Date();
+                    exportRow['Lead Time (dias)'] = ((endDate - startDate) / msPerDay).toFixed(1);
+                } else {
+                    exportRow['Lead Time (dias)'] = 'N/A';
+                }
+
+                if (task.startedAt && task.completedAt) {
+                    const startDate = new Date(task.startedAt);
+                    const endDate = new Date(task.completedAt);
+                    exportRow['Cycle Time (dias)'] = ((endDate - startDate) / msPerDay).toFixed(1);
+                } else {
+                    exportRow['Cycle Time (dias)'] = 'N/A';
+                }
+
+                exportRow['Tempo Gasto (HH:MM:SS)'] = formatTime(task.timeSpent);
+                exportRow['Tempo Previsto (h)'] = task.expectedTime;
+                const deviation = (task.timeSpent / 3600000) - task.expectedTime;
+                exportRow['Desvio (h)'] = task.expectedTime > 0 ? deviation.toFixed(2) : 'N/A';
+                exportRow['Contador de Play'] = task.playCount || 0;
+
+                if (task.startedAt) exportRow['Data de Início'] = new Date(task.startedAt);
+                if (task.completedAt) exportRow['Data de Conclusão'] = new Date(task.completedAt);
+                if (task.createdAt) exportRow['Criado_GD'] = new Date(task.createdAt);
+
+                return exportRow;
+            });
+            
+            const finalHeaders = [...new Set([...allHeaders, 'Data de Início', 'Lead Time (dias)', 'Cycle Time (dias)', 'Tempo Gasto (HH:MM:SS)', 'Tempo Previsto (h)', 'Desvio (h)', 'Contador de Play'])];
+            
+            const ws = XLSX.utils.json_to_sheet(dataToExport, { header: finalHeaders, cellDates: true });
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Demandas Atualizadas");
+            XLSX.writeFile(wb, "demandas_atualizadas.xlsx");
+        };
+
+        const clearData = async () => {
+            if (window.confirm("Tem certeza que deseja limpar TODOS os dados do banco de dados? Esta ação é um reset completo e não pode ser desfeita.")) {
+                showLoading("Limpando banco de dados...");
+                try {
+                    const collectionsToClear = [tasksCollection, catalogCollection, historyCollection, timeLogCollection];
+                    for (const coll of collectionsToClear) {
+                        const snapshot = await getDocs(query(coll));
+                        const batch = writeBatch(db);
+                        snapshot.docs.forEach(d => batch.delete(d.ref));
+                        await batch.commit();
+                    }
+                    
+                    // Repopular o catálogo padrão
+                    await populateDefaultCatalog();
+
+                    alert("Aplicação reiniciada. Todos os dados foram limpos com sucesso e o catálogo padrão foi restaurado.");
+                } catch (error) {
+                    console.error("Erro ao limpar dados:", error);
+                    alert("Ocorreu um erro ao limpar os dados.");
+                } finally {
+                    hideLoading();
+                }
+                // O onSnapshot cuidará de atualizar a UI para um estado vazio.
+            }
+        };
+
+        const switchTab = (activeTabId) => {
+            Object.values(elements.views).forEach(view => view.classList.add('hidden'));
+            Object.values(elements.tabs).forEach(tab => tab.classList.remove('active'));
+            elements.views[activeTabId].classList.remove('hidden');
+            elements.tabs[activeTabId].classList.add('active');
+            renderActiveTabView();
+        };
+
+        const populateGlobalFilters = () => {
+            const filtersContainer = elements.globalFilters;
+            filtersContainer.innerHTML = '';
+            
+            teamMembers = [...new Set(tasks.map(t => t.responsible).filter(Boolean))].sort();
+
+            const filterConfigs = [
+                { key: 'ID_REF', label: 'ID (REF)', type: 'text' },
+                { key: 'status', label: 'Status Kanban', values: Object.keys(STATUS_OPTIONS) },
+                { key: 'responsible', label: 'Responsável', values: teamMembers },
+                { key: 'nucleus', label: 'Núcleo' },
+                { key: 'Plano', originalDataKey: 'Plano' },
+                { key: 'Prioridade', originalDataKey: 'Prioridade' },
+                { key: 'process', label: 'Processo' },
+                { key: 'Solicitado por', originalDataKey: 'Solicitado por' },
+                { key: 'Área do Solicitante', originalDataKey: 'Área do Solicitante' },
+                { key: 'Alimentador', originalDataKey: 'Alimentador' }
+            ];
+
+            filterConfigs.forEach(config => {
+                const filterWrapper = document.createElement('div');
+                const label = config.label || config.key;
+                
+                if (config.type === 'text') {
+                    filterWrapper.innerHTML = `<label for="filter-${config.key}" class="block text-xs font-medium text-gray-400 mb-1">${label}</label><input type="text" id="filter-${config.key}" data-filter-key="${config.key}" class="global-filter w-full p-2 rounded bg-gray-700 border border-gray-600 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">`;
+                } else {
+                    const dataKey = config.originalDataKey || config.key;
+                    const values = config.values || [...new Set(tasks.map(t => config.originalDataKey ? t.originalData?.[dataKey] : t[dataKey]).filter(Boolean))].sort();
+                    if (values.length === 0) return;
+
+                    const options = config.key === 'status'
+                        ? values.map(val => `<option value="${val}">${STATUS_OPTIONS[val]}</option>`).join('')
+                        : values.map(val => `<option value="${val}">${val}</option>`).join('');
+
+                    filterWrapper.innerHTML = `<label for="filter-${config.key}" class="block text-xs font-medium text-gray-400 mb-1">${label}</label><select id="filter-${config.key}" data-filter-key="${config.key}" data-source-key="${dataKey}" class="global-filter w-full p-2 rounded bg-gray-700 border border-gray-600 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"><option value="">Todos</option>${options}</select>`;
+                }
+                filtersContainer.appendChild(filterWrapper);
+            });
+        };
+        
+        const getFilteredTasks = () => {
+            const activeFilters = Array.from(document.querySelectorAll('.global-filter')).filter(f => f.value !== '');
+            if (activeFilters.length === 0) return tasks;
+
+            return tasks.filter(task => {
+                return activeFilters.every(filter => {
+                    const filterKey = filter.dataset.filterKey;
+                    const sourceKey = filter.dataset.sourceKey;
+                    const filterValue = filter.value;
+
+                    if (filterKey === 'ID_REF') return String(task.originalId).includes(filterValue);
+                    
+                    const taskValue = sourceKey === filterKey ? task[filterKey] : task.originalData?.[sourceKey];
+                    return String(taskValue) === filterValue;
+                });
+            });
+        };
+        
+        const sortTasks = (tasksToSort, sortBy, sortDirection) => {
+            const priorityMap = { 'Alta': 3, 'Média': 2, 'Baixa': 1 };
+
+            return [...tasksToSort].sort((a, b) => {
+                let primaryA, primaryB;
+
+                switch (sortBy) {
+                    case 'score': primaryA = a.scoreGUT || a.scoreRICE || 0; primaryB = b.scoreGUT || b.scoreRICE || 0; break;
+                    case 'createdAt': primaryA = new Date(a.createdAt); primaryB = new Date(b.createdAt); break;
+                    case 'id': primaryA = parseInt(a.originalId, 10) || 0; primaryB = parseInt(b.originalId, 10) || 0; break;
+                    case 'reclamacoes': primaryA = a.reclamacoes30d || 0; primaryB = b.reclamacoes30d || 0; break;
+                    case 'criticidade': primaryA = priorityMap[a.originalData?.Prioridade] || 0; primaryB = priorityMap[b.originalData?.Prioridade] || 0; break;
+                    default: primaryA = a.scoreGUT || a.scoreRICE || 0; primaryB = b.scoreGUT || b.scoreRICE || 0;
+                }
+
+                const direction = sortDirection === 'asc' ? 1 : -1;
+                if (primaryA < primaryB) return -1 * direction;
+                if (primaryA > primaryB) return 1 * direction;
+
+                const scoreA = a.scoreGUT || a.scoreRICE || 0;
+                const scoreB = b.scoreGUT || b.scoreRICE || 0;
+                if (scoreA !== scoreB) return scoreB - scoreA;
+
+                const reclamacoesA = a.reclamacoes30d || 0;
+                const reclamacoesB = b.reclamacoes30d || 0;
+                if (reclamacoesA !== reclamacoesB) return reclamacoesB - reclamacoesA;
+                
+                return new Date(a.createdAt) - new Date(b.createdAt);
+            });
+        };
+
+        const renderActiveTabView = () => {
+            const activeTab = document.querySelector('.tab-btn.active')?.id.replace('tab-', '');
+            if (!activeTab) return;
+            const filteredTasks = getFilteredTasks();
+            if (activeTab === 'dashboard') renderDashboard(filteredTasks);
+            else if (activeTab === 'demandas') renderTable(filteredTasks, duplicateIdList);
+            else if (activeTab === 'kanban') renderBoard(filteredTasks);
+            else if (activeTab === 'catalogo') renderCatalog();
+            else if (activeTab === 'hc') renderHC();
+        };
+        
+        const createCardElement = (task) => {
+            const card = document.createElement('div');
+            card.className = 'kanban-card bg-gray-700 p-3 rounded-lg shadow-md border-l-4';
+            card.setAttribute('draggable', true); card.dataset.id = task.id;
+            
+            const score = task.scoreGUT || task.scoreRICE || 0;
+            const scoreColor = task.demandType === 'problema' ? 'red' : 'green';
+            let borderColor = 'border-gray-500';
+            if(score > 80) borderColor = 'border-red-500';
+            else if (score > 40) borderColor = 'border-yellow-500';
+            else if (score > 0) borderColor = 'border-blue-500';
+            card.classList.add(borderColor);
+
+            let playButton = `<button data-action="play" data-id="${task.id}" class="text-green-400 hover:text-green-300"> <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"> <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /> </svg> </button>`;
+            let pauseButton = `<button data-action="pause" data-id="${task.id}" class="text-yellow-400 hover:text-yellow-300"> <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"> <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 00-1 1v2a1 1 0 102 0V9a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v2a1 1 0 102 0V9a1 1 0 00-1-1z" clip-rule="evenodd" /> </svg> </button>`;
+            
+            let timerControls = '';
+            if (task.status === 'andamento') {
+                timerControls = task.isTiming ? pauseButton : playButton;
+            } else if (task.status !== 'concluido') {
+                timerControls = playButton;
+            }
+
+            let effortTracker = '';
+            if (task.expectedTime > 0) {
+                const timeSpentHours = task.timeSpent / 3600000;
+                const percentage = Math.min((timeSpentHours / task.expectedTime) * 100, 100);
+                let progressBarColor = 'bg-blue-600';
+                if (percentage >= 100) {
+                    progressBarColor = 'bg-red-600';
+                } else if (percentage >= 80) {
+                    progressBarColor = 'bg-yellow-500';
+                }
+                effortTracker = `
+                    <div class="mt-2">
+                        <div class="flex justify-between text-xs text-gray-300 mb-1">
+                            <span class="effort-spent">${timeSpentHours.toFixed(1)}h</span>
+                            <span>${task.expectedTime.toFixed(1)}h</span>
+                        </div>
+                        <div class="w-full bg-gray-600 rounded-full h-1.5">
+                            <div class="effort-bar-fill ${progressBarColor} h-1.5 rounded-full" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <p class="font-bold text-sm flex-1 pr-2 kanban-card-main-content">${task.title}</p>
+                    ${score > 0 ? `<span class="text-xs font-bold text-${scoreColor}-400 bg-gray-800 px-2 py-1 rounded-full">${Number(score).toFixed(1)}</span>` : ''}
+                </div>
+                <p class="text-xs text-gray-400 mt-1 kanban-card-main-content">ID: ${task.originalId}</p>
+                <div class="mt-3 flex justify-between items-center">
+                    <div class="flex items-center space-x-2 text-xs text-gray-400 kanban-card-main-content">
+                        <span class="bg-gray-600 px-2 py-1 rounded-md">${task.nucleus || 'N/A'}</span>
+                        <span>${task.responsible || 'N/D'}</span>
+                    </div>
+                    <div class="flex items-center space-x-2 timer-controls">
+                        <div class="flex items-center space-x-1 text-xs text-gray-400" title="Contador de Play/Pause">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 19v-5h-5M4 19h5v-5M20 5h-5v5"/></svg>
+                            <span>${task.playCount || 0}</span>
+                        </div>
+                        <span class="text-sm font-mono timer-display" data-id="${task.id}">${formatTime(task.timeSpent)}</span>
+                        ${timerControls}
+                    </div>
+                </div>
+                ${effortTracker}
+                `;
+            
+            card.querySelector('.kanban-card-main-content').addEventListener('click', () => openModal(task.id));
+            card.addEventListener('dragstart', (e) => { draggedTaskId = task.id; e.currentTarget.classList.add('dragging'); });
+            card.addEventListener('dragend', (e) => e.currentTarget.classList.remove('dragging'));
+            return card;
+        };
+
+        const renderBoard = (tasksToRender) => {
+            elements.kanbanColumns.forEach(col => col.innerHTML = '');
+
+            const columnCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({...acc, [status]: 0}), {});
+            tasksToRender.forEach(task => {
+                if (columnCounts.hasOwnProperty(task.status)) {
+                    columnCounts[task.status]++;
+                }
+            });
+
+            Object.keys(columnCounts).forEach(status => {
+                const countElement = document.getElementById(`count-${status}`);
+                if (countElement) {
+                    if (status === 'andamento') {
+                        countElement.textContent = `${columnCounts[status]}/${WIP_LIMIT}`;
+                        countElement.classList.toggle('wip-limit-exceeded', columnCounts[status] > WIP_LIMIT);
+                    } else {
+                        countElement.textContent = columnCounts[status];
+                    }
+                }
+            });
+
+            const sortedTasks = sortTasks(tasksToRender, currentSort.by, currentSort.direction);
+            sortedTasks.forEach(task => {
+                const column = document.getElementById(`column-${task.status}`);
+                if (column) column.appendChild(createCardElement(task));
+            });
+        };
+
+        const renderTable = (tasksToRender, duplicateIds = []) => {
+            const container = elements.tableContainer;
+            if (!allHeaders || allHeaders.length === 0) {
+                const hasTasks = tasks.length > 0;
+                container.innerHTML = `<p class="text-gray-400 p-4">${hasTasks ? 'Nenhuma demanda corresponde aos filtros aplicados.' : 'Nenhum dado importado. Clique em "Importar Demandas" para começar.'}</p>`;
+                return;
+            }
+
+            const msPerDay = 1000 * 60 * 60 * 24;
+            const headers = [...new Set([...allHeaders, 'Score', 'Data de Início', 'Lead Time (dias)', 'Cycle Time (dias)', 'Tempo Gasto (HH:MM:SS)', 'Tempo Previsto (h)', 'Desvio (h)', 'Contador de Play'])];
+            const longTextColumns = ['Título', 'Descrição', 'Motivo Reclamação', 'Observação'];
+            const dateColumns = ['Criado', 'Modificado', 'Data de Conclusão', 'Prazo', 'Data de Início', 'Criado_GD'];
+
+            const getCellClass = (header) => {
+                let classes = 'p-2 border-b border-gray-700';
+                if (longTextColumns.includes(header)) classes += ' break-words max-w-md';
+                else classes += ' whitespace-nowrap';
+                return classes;
+            };
+
+            const table = `
+                <table class="w-full text-left">
+                    <thead><tr>${headers.map(h => `<th class="p-2 border-b border-gray-700 whitespace-nowrap">${h}</th>`).join('')}</tr></thead>
+                    <tbody>
+                        ${tasksToRender.map(task => {
+                            let leadTimeDays = 'N/A';
+                            if (task.createdAt) {
+                                const startDate = new Date(task.createdAt);
+                                const endDate = task.completedAt ? new Date(task.completedAt) : new Date();
+                                leadTimeDays = ((endDate - startDate) / msPerDay).toFixed(1);
+                            }
+
+                            let cycleTimeDays = 'N/A';
+                            if (task.startedAt && task.completedAt) {
+                                const startDate = new Date(task.startedAt);
+                                const endDate = new Date(task.completedAt);
+                                cycleTimeDays = ((endDate - startDate) / msPerDay).toFixed(1);
+                            }
+
+                            const isDuplicate = duplicateIds.includes(task.originalId);
+                            const score = task.scoreGUT || task.scoreRICE || 0;
+                            const timeSpentHours = task.timeSpent / 3600000;
+                            const deviation = timeSpentHours - task.expectedTime;
+                            let deviationClass = '';
+                            if (task.expectedTime > 0) {
+                                deviationClass = deviation > 0 ? 'text-red-400' : 'text-green-400';
+                            }
+
+                            return `
+                            <tr class="${isDuplicate ? 'bg-red-900/50' : ''}">
+                                ${headers.map(h => {
+                                    let cellValue;
+                                    switch(h) {
+                                        case 'Score': cellValue = score.toFixed(1); break;
+                                        case 'Data de Início': cellValue = formatDate(task.startedAt); break;
+                                        case 'Lead Time (dias)': cellValue = leadTimeDays; break;
+                                        case 'Cycle Time (dias)': cellValue = cycleTimeDays; break;
+                                        case 'Tempo Gasto (HH:MM:SS)': cellValue = formatTime(task.timeSpent); break;
+                                        case 'Tempo Previsto (h)': cellValue = task.expectedTime > 0 ? task.expectedTime.toFixed(1) : 'N/A'; break;
+                                        case 'Desvio (h)': cellValue = task.expectedTime > 0 ? deviation.toFixed(2) : 'N/A'; break;
+                                        case 'Contador de Play': cellValue = task.playCount || 0; break;
+                                        default: cellValue = task.originalData[h];
+                                    }
+                                    const formattedValue = dateColumns.includes(h) ? formatDate(cellValue) : (cellValue || '');
+                                    const isScore = h === 'Score';
+                                    const isDeviation = h === 'Desvio (h)';
+
+                                    return `<td class="${getCellClass(h)} ${isScore ? 'font-bold text-yellow-400' : ''} ${isDeviation ? `font-bold ${deviationClass}` : ''}">${formattedValue}</td>`;
+                                }).join('')}
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>`;
+            container.innerHTML = tasksToRender.length > 0 ? table : '<p class="text-gray-400 p-4">Nenhuma demanda corresponde aos filtros aplicados.</p>';
+        };
+        
+        // --- COLOR UTILITY ---
+        const CHART_COLORS = ['rgba(54, 162, 235, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)','rgba(199, 199, 199, 0.7)', 'rgba(83, 102, 255, 0.7)', 'rgba(40, 159, 64, 0.7)'];
+        const processColorMap = new Map();
+        let nextColorIndex = 0;
+
+        const getProcessColor = (process) => {
+            if (!processColorMap.has(process)) {
+                processColorMap.set(process, CHART_COLORS[nextColorIndex % CHART_COLORS.length]);
+                nextColorIndex++;
+            }
+            return processColorMap.get(process);
+        };
+
+        // --- FUNÇÕES DO DASHBOARD ---
+        const getWeekLabel = (date) => {
+            const d = new Date(date);
+            const firstDayOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+            const dayOfWeekOfFirst = firstDayOfMonth.getDay();
+            const offset = dayOfWeekOfFirst === 0 ? 6 : dayOfWeekOfFirst - 1; 
+            const weekOfMonth = Math.ceil((d.getDate() + offset) / 7);
+
+            const month = d.toLocaleString('pt-BR', { month: 'short' }).replace('.', '');
+            const year = d.getFullYear().toString().slice(-2);
+            const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1);
+            return `${capitalizedMonth}/${year}-S${weekOfMonth}`;
+        };
+        
+        const sortWeekLabels = (a, b) => {
+            const [monthA, yearWeekA] = a.split('/');
+            const [yearA, weekA] = yearWeekA.split('-S');
+            const [monthB, yearWeekB] = b.split('/');
+            const [yearB, weekB] = yearWeekB.split('-S');
+
+            if (yearA !== yearB) return parseInt(yearA) - parseInt(yearB);
+            
+            const monthOrder = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+            const monthIndexA = monthOrder.indexOf(monthA);
+            const monthIndexB = monthOrder.indexOf(monthB);
+
+            if (monthIndexA !== monthIndexB) return monthIndexA - monthIndexB;
+            return parseInt(weekA) - parseInt(weekB);
+        };
+
+        const renderWipTracker = (tasksToRender) => {
+            const container = document.getElementById('wip-tracker-container');
+            if (!container) return;
+            const inProgressTasks = tasksToRender.filter(t => t.isTiming);
+
+            if (inProgressTasks.length === 0) {
+                container.innerHTML = `<p class="text-gray-400 text-center py-4 text-sm">Nenhuma tarefa com cronômetro ativo.</p>`;
+                return;
+            }
+
+            container.innerHTML = inProgressTasks.map(task => {
+                const time = task.timeSpent + (task.isTiming ? (Date.now() - new Date(task.lastStartTime)) : 0);
+                const timeSpentHours = time / 3600000;
+                
+                let effortTracker = '';
+                if (task.expectedTime > 0) {
+                    const percentage = Math.min((timeSpentHours / task.expectedTime) * 100, 100);
+                    let progressBarColor = 'bg-blue-600';
+                    if (percentage >= 100) progressBarColor = 'bg-red-600';
+                    else if (percentage >= 80) progressBarColor = 'bg-yellow-500';
+                    
+                    effortTracker = `
+                        <div class="w-full bg-gray-600 rounded-full h-1 mt-1">
+                            <div class="wip-bar-fill ${progressBarColor} h-1 rounded-full" style="width: ${percentage}%"></div>
+                        </div>
+                    `;
+                }
+
+                return `
+                <div class="wip-item py-2 border-b border-gray-700 last:border-b-0" data-id="${task.id}">
+                    <div class="flex justify-between items-center">
+                        <div class="flex-1 overflow-hidden pr-2">
+                            <div class="text-sm font-semibold truncate text-gray-200" title="${task.title}">${task.title}</div>
+                            <div class="flex items-center space-x-3 text-xs text-purple-400">
+                                <span>${task.responsible || 'N/D'}</span>
+                                <div class="flex items-center space-x-1" title="Contador de Play/Pause">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 19v-5h-5M4 19h5v-5M20 5h-5v5"/></svg>
+                                    <span>${task.playCount || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="timer-display text-base font-mono text-gray-300" data-id="${task.id}">${formatTime(time)}</div>
+                            ${task.expectedTime > 0 ? `<div class="text-xs text-gray-400"><span class="wip-spent">${timeSpentHours.toFixed(1)}h</span> / ${task.expectedTime.toFixed(1)}h</div>` : ''}
+                        </div>
+                    </div>
+                    ${effortTracker}
+                </div>`;
+            }).join('');
+        };
+
+        const renderTimeEvolutionChart = (tasksToRender) => {
+            const completedTasks = tasksToRender.filter(t => t.completedAt && t.startedAt && t.createdAt);
+            if (history.length === 0) {
+                createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', { labels: [], datasets: [] });
+                return;
+            }
+            const allWeeklyLabels = [...new Set(history.map(day => getWeekLabel(new Date(day.date))))].sort(sortWeekLabels);
+
+            const weeklyMetrics = {};
+            const msPerDay = 1000 * 60 * 60 * 24;
+
+            completedTasks.forEach(task => {
+                const week = getWeekLabel(new Date(task.completedAt));
+                if (!weeklyMetrics[week]) weeklyMetrics[week] = { leadTimes: [], cycleTimes: [], count: 0 };
+                weeklyMetrics[week].leadTimes.push((new Date(task.completedAt) - new Date(task.createdAt)) / msPerDay);
+                weeklyMetrics[week].cycleTimes.push((new Date(task.completedAt) - new Date(task.startedAt)) / msPerDay);
+                weeklyMetrics[week].count++;
+            });
+            
+            const avgLeadTimes = allWeeklyLabels.map(label => {
+                const weekData = weeklyMetrics[label];
+                if (!weekData || weekData.leadTimes.length === 0) return 0;
+                return (weekData.leadTimes.reduce((a, b) => a + b, 0) / weekData.leadTimes.length).toFixed(1);
+            });
+            const avgCycleTimes = allWeeklyLabels.map(label => {
+                const weekData = weeklyMetrics[label];
+                if (!weekData || weekData.cycleTimes.length === 0) return 0;
+                return (weekData.cycleTimes.reduce((a, b) => a + b, 0) / weekData.cycleTimes.length).toFixed(1);
+            });
+            const throughputData = allWeeklyLabels.map(label => weeklyMetrics[label] ? weeklyMetrics[label].count : 0);
+
+            const data = {
+                labels: allWeeklyLabels,
+                datasets: [
+                    { label: 'Vazão (itens)', data: throughputData, type: 'bar', backgroundColor: 'rgba(16, 185, 129, 0.5)', borderColor: 'rgba(16, 185, 129, 1)', yAxisID: 'y1', order: 2 },
+                    { label: 'Lead Time Médio (dias)', data: avgLeadTimes, borderColor: '#a78bfa', backgroundColor: '#a78bfa', tension: 0.2, type: 'line', yAxisID: 'y', order: 1, spanGaps: false },
+                    { label: 'Cycle Time Médio (dias)', data: avgCycleTimes, borderColor: '#60a5fa', backgroundColor: '#60a5fa', tension: 0.2, type: 'line', yAxisID: 'y', order: 0, spanGaps: false }
+                ]
+            };
+            createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', data, {
+                scales: {
+                    y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Dias', color: '#d1d5db' }, ticks: { color: '#d1d5db' } },
+                    y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Nº de Itens Concluídos', color: '#d1d5db' }, grid: { drawOnChartArea: false }, ticks: { color: '#d1d5db', stepSize: 1 } }
+                }
+            });
+        };
+        
+        const populateTimeLogWeekSelector = () => {
+            const selector = elements.timeLogWeekSelector;
+            const allWeeks = [...new Set(timeLog.map(log => getWeekLabel(new Date(log.timestamp))))].sort(sortWeekLabels).reverse();
+            
+            if (allWeeks.length === 0) {
+                selector.innerHTML = `<option value="">Sem dados de tempo</option>`;
+                selector.disabled = true;
                 return;
             }
             
-            // --- VARIÁVEIS DE ESTADO E CONFIGURAÇÃO ---
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'gestaoequipe';
-            const WIP_LIMIT = 5;
-            let tasks = [];
-            let allHeaders = [];
-            let history = [];
-            let timeLog = [];
-            let activityCatalog = {};
-            let duplicateIdList = [];
-            let teamMembers = [];
-            let draggedTaskId = null;
-            let chartObjects = {};
-            let currentSort = { by: 'score', direction: 'desc' };
-            let timerInterval = null;
-            let currentView = 'manager';
-            let isManager = false;
-            let userId = null;
-            let dataLoaded = false; // Flag para controlar o primeiro carregamento
+            selector.disabled = false;
+            selector.innerHTML = allWeeks.map(week => `<option value="${week}">${week}</option>`).join('');
+        };
+        
+        const renderTimeLogCharts = () => {
+            const selectedWeek = elements.timeLogWeekSelector.value;
+            if (!selectedWeek) {
+                createOrUpdateChart('collaboratorHoursChart', 'bar', 'Horas Investidas por Colaborador', { labels: [], datasets: [] });
+                createOrUpdateChart('processHoursChart', 'bar', 'Horas Investidas por Processo', { labels: [], datasets: [] });
+                return;
+            }
+            const weeklyLogs = timeLog.filter(log => getWeekLabel(new Date(log.timestamp)) === selectedWeek);
 
-            // Referências para as coleções no Firestore
-            let tasksCollectionRef;
-            let configDocRef;
+            // Render Horas por Colaborador
+            const dataByCollaborator = {};
+            const allProcesses = [...new Set(weeklyLogs.map(log => log.process || 'Não Definido'))];
+            weeklyLogs.forEach(log => {
+                if (!log.responsible) return;
+                const process = log.process || 'Não Definido';
+                if (!dataByCollaborator[log.responsible]) dataByCollaborator[log.responsible] = {};
+                dataByCollaborator[log.responsible][process] = (dataByCollaborator[log.responsible][process] || 0) + log.duration;
+            });
 
-            // Funções para cancelar os listeners do Firestore quando o usuário deslogar
-            let unsubscribeTasks = () => {};
-            let unsubscribeConfig = () => {};
+            const collabLabels = Object.keys(dataByCollaborator);
+            const collabDatasets = allProcesses.map(process => ({
+                label: process,
+                data: collabLabels.map(c => ((dataByCollaborator[c][process] || 0) / 3600000).toFixed(2)),
+                backgroundColor: getProcessColor(process),
+            }));
+            createOrUpdateChart('collaboratorHoursChart', 'bar', `Horas por Colaborador (${selectedWeek})`, { labels: collabLabels, datasets: collabDatasets }, { scales: { x: { stacked: true }, y: { stacked: true, title: { display: true, text: 'Horas' } } } });
+
+            // Render Horas por Processo
+            const dataByProcess = {};
+            weeklyLogs.forEach(log => {
+                const process = log.process || 'Não Definido';
+                dataByProcess[process] = (dataByProcess[process] || 0) + log.duration;
+            });
             
-            const defaultActivityCatalog = {
-                "Elaboração de OGs para novas obras em TAF (OLTC. BC e Reator)": { "time": 1.3, "process": "Tensão em regime permanente", "annualNeed": 200, "executionPercentage": 100, "role": "Eng" },
-                "Elaboração de OGs para RTs/BCs (plano 8.4) Revisão de OGS": { "time": 0.8, "process": "Tensão em regime permanente", "annualNeed": 402, "executionPercentage": 100, "role": "Eng/Tec" },
-            };
-            
-            // Mapeamento de todos os elementos da interface para fácil acesso
-            const elements = {
-                addDemandBtn: document.getElementById('add-demand-btn'),
-                importBtn: document.getElementById('import-btn'),
-                exportBtn: document.getElementById('export-btn'),
-                fileInput: document.getElementById('file-input'),
-                clearFiltersBtn: document.getElementById('clear-filters-btn'),
-                clearDataBtn: document.getElementById('clear-data-btn'),
-                viewToggle: document.getElementById('view-toggle'),
-                viewToggleContainer: document.getElementById('view-toggle-container'),
-                tabs: { dashboard: document.getElementById('tab-dashboard'), demandas: document.getElementById('tab-demandas'), kanban: document.getElementById('tab-kanban'), catalogo: document.getElementById('tab-catalogo'), hc: document.getElementById('tab-hc') },
-                views: { dashboard: document.getElementById('view-dashboard'), demandas: document.getElementById('view-demandas'), kanban: document.getElementById('view-kanban'), catalogo: document.getElementById('view-catalogo'), hc: document.getElementById('view-hc') },
-                tableContainer: document.getElementById('table-container'),
-                duplicateWarning: document.getElementById('duplicate-warning'),
-                duplicateMessage: document.getElementById('duplicate-message'),
-                kanbanBoard: document.getElementById('kanban-board'),
-                kanbanColumns: document.querySelectorAll('.kanban-column'),
-                globalFilters: document.getElementById('global-filters'),
-                kanbanSortBy: document.getElementById('kanban-sort-by'),
-                kanbanSortDirection: document.getElementById('kanban-sort-direction'),
-                timeLogWeekSelector: document.getElementById('time-log-week-selector'),
-                catalog: { container: document.getElementById('catalog-table-container'), addBtn: document.getElementById('add-activity-btn'), modal: document.getElementById('catalog-edit-modal'), form: document.getElementById('catalog-edit-form'), title: document.getElementById('catalog-modal-title'), originalName: document.getElementById('original-activity-name'), editName: document.getElementById('edit-activity-name'), editProcess: document.getElementById('edit-activity-process'), editRole: document.getElementById('edit-activity-role'), editTime: document.getElementById('edit-activity-time'), editAnnualNeed: document.getElementById('edit-activity-annual-need'), editExecPercentage: document.getElementById('edit-activity-execution-percentage'), deleteBtn: document.getElementById('delete-activity-btn'), cancelBtn: document.getElementById('cancel-catalog-edit-btn') },
-                hc: { hoursInput: document.getElementById('hc-hours-input'), productivityFactor: document.getElementById('hc-productivity-factor'), baseTotal: document.getElementById('hc-base-total'), currentTotal: document.getElementById('hc-current-total'), annualTotal: document.getElementById('hc-annual-total'), realTotal: document.getElementById('hc-real-total'), baseEng: document.getElementById('hc-base-eng'), currentEng: document.getElementById('hc-current-eng'), annualEng: document.getElementById('hc-annual-eng'), realEng: document.getElementById('hc-real-eng'), baseTec: document.getElementById('hc-base-tec'), currentTec: document.getElementById('hc-current-tec'), annualTec: document.getElementById('hc-annual-tec'), realTec: document.getElementById('hc-real-tec'), },
-                effortAnalysisChartContainer: document.getElementById('effort-analysis-chart-container'),
-                efficiencyChartContainer: document.getElementById('efficiency-chart-container'),
-                kpis: { cycleTime: document.getElementById('kpi-cycle-time'), leadTime: document.getElementById('kpi-lead-time'), throughput: document.getElementById('kpi-throughput') },
-                modal: { container: document.getElementById('demand-modal'), form: document.getElementById('demand-form'), title: document.getElementById('modal-title'), id: document.getElementById('demand-id'), status: document.getElementById('demand-status'), demandTitle: document.getElementById('demand-title'), responsible: document.getElementById('demand-responsible'), nucleus: document.getElementById('demand-nucleus'), description: document.getElementById('demand-description'), type: document.getElementById('demand-type'), completionDateWrapper: document.getElementById('completion-date-wrapper'), completionDate: document.getElementById('demand-completion-date'), originalDataContent: document.getElementById('original-data-content'), critScore: document.getElementById('crit-score'), critReclamacoes: document.getElementById('crit-reclamacoes'), critPrazo: document.getElementById('crit-prazo'), gut: { fields: document.getElementById('gut-fields'), g: document.getElementById('gut-g'), u: document.getElementById('gut-u'), t: document.getElementById('gut-t'), formula: document.getElementById('gut-formula-display'), score: document.getElementById('gut-score-display') }, rice: { fields: document.getElementById('rice-fields'), reach: document.getElementById('rice-reach'), impact: document.getElementById('rice-impact'), confidence: document.getElementById('rice-confidence'), effort: document.getElementById('rice-effort'), formula: document.getElementById('rice-formula-display'), score: document.getElementById('rice-score-display') }, closeBtn: document.getElementById('close-modal-btn'), cancelBtn: document.getElementById('cancel-btn'), deleteBtn: document.getElementById('delete-demand-btn') }
-            };
+            const sortedProcesses = Object.entries(dataByProcess).sort((a,b) => b[1] - a[1]);
+            const processLabels = sortedProcesses.map(item => item[0]);
+            const processData = sortedProcesses.map(item => (item[1] / 3600000).toFixed(2));
+            createOrUpdateChart('processHoursChart', 'bar', `Horas por Processo (${selectedWeek})`, { labels: processLabels, datasets: [{ label: 'Horas Investidas', data: processData, backgroundColor: processLabels.map(p => getProcessColor(p)) }] }, { indexAxis: 'y', scales: { x: { title: { display: true, text: 'Horas' } } }, plugins: { legend: { display: false } } });
+        };
 
-            const STATUS_OPTIONS = { triagem: "Caixa de Entrada", backlog: "Backlog Priorizado", fazer: "A Fazer", andamento: "Em Andamento", validacao: "Em Validação", concluido: "Concluído" };
-            const STATUS_TO_SHEET_MAP = { triagem: "criada", backlog: "backlog", fazer: "a fazer", andamento: "em andamento", validacao: "em validação", concluido: "concluído" };
-
-            const formatDate = (dateString) => {
-                if (!dateString) return '';
-                const date = new Date(dateString);
-                if (isNaN(date.getTime())) return dateString;
-                return date.toLocaleString('pt-BR', {
-                    day: '2-digit', month: '2-digit', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit'
-                }).replace(',', '');
-            };
-            
-            const handleImport = async (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    const data = e.target.result;
-                    let workbook;
-                    try {
-                        workbook = XLSX.read(data, { type: 'binary', cellDates: true, codepage: 65001 });
-                    } catch (error) {
-                        console.error("Error parsing file:", error);
-                        alert("Erro ao ler o arquivo.");
-                        return;
+        const renderEffortAnalysisChart = (tasksToRender) => {
+            const effortByProcess = tasksToRender.reduce((acc, task) => {
+                if (task.expectedTime > 0) {
+                    const process = task.process || 'Não Definido';
+                    if (!acc[process]) {
+                        acc[process] = { expected: 0, spent: 0 };
                     }
+                    acc[process].expected += task.expectedTime;
+                    acc[process].spent += task.timeSpent / 3600000;
+                }
+                return acc;
+            }, {});
 
-                    const sheetName = workbook.SheetNames[0];
-                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-                    
-                    const newTasks = jsonData.map((row, index) => {
-                         const statusMap = { "criada": "triagem", "em andamento": "andamento", "concluído": "concluido", "concluída": "concluido" };
-                         const sheetStatus = (row.Status || '').toLowerCase().trim();
-                         let status = statusMap[sheetStatus] || 'triagem';
-                        return {
-                            originalId: row.ID_REF,
-                            title: row.Título || 'Sem Título',
-                            description: row.Descrição || '',
-                            status: status,
-                            responsible: row['Atribuído a'] || '',
-                            createdAt: row.Criado_GD ? new Date(row.Criado_GD).toISOString() : new Date().toISOString(),
-                            originalData: row
-                        };
-                    });
+            const labels = Object.keys(effortByProcess);
+            const expectedData = labels.map(label => effortByProcess[label].expected.toFixed(2));
+            const spentData = labels.map(label => effortByProcess[label].spent.toFixed(2));
 
-                    const batch = firebase.writeBatch(db);
-                    newTasks.forEach(task => {
-                        const newDocRef = firebase.doc(tasksCollectionRef);
-                        batch.set(newDocRef, task);
-                    });
-                    
-                    try {
-                        await batch.commit();
-                        alert(`${newTasks.length} demandas foram importadas para o Firebase com sucesso!`);
-                    } catch (error) {
-                        console.error("Erro ao importar para o Firebase:", error);
-                        alert("Ocorreu um erro ao salvar as demandas.");
+            const data = {
+                labels,
+                datasets: [
+                    {
+                        label: 'Tempo Previsto (h)',
+                        data: expectedData,
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Tempo Realizado (h)',
+                        data: spentData,
+                        backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
                     }
-                    
-                    elements.fileInput.value = '';
-                };
-                reader.readAsBinaryString(file);
+                ]
             };
 
-            const clearData = async () => {
-                if (window.confirm("Tem certeza que deseja limpar TODAS as demandas do banco de dados? Esta ação não pode ser desfeita.")) {
-                    try {
-                        const querySnapshot = await firebase.getDocs(tasksCollectionRef);
-                        const batch = firebase.writeBatch(db);
-                        querySnapshot.forEach(doc => {
-                            batch.delete(doc.ref);
-                        });
-                        await batch.commit();
-                        
-                        await firebase.setDoc(configDocRef, { 
-                            catalog: defaultActivityCatalog, 
-                            view: 'manager', 
-                            managers: [userId]
-                        });
+            createOrUpdateChart('effortAnalysisChart', 'bar', 'Análise de Esforço: Previsto vs. Realizado por Processo', data, {
+                indexAxis: 'y',
+                scales: { y: { ticks: { font: { size: 10 }}}}
+            });
+        };
 
-                        alert("Todos os dados foram limpos do Firebase.");
-                    } catch (error) {
-                        console.error("Erro ao limpar dados:", error);
-                        alert("Ocorreu um erro ao limpar os dados.");
+        const renderEfficiencyChart = (tasksToRender) => {
+            const effortByCollaborator = tasksToRender.reduce((acc, task) => {
+                if (task.expectedTime > 0 && task.responsible) {
+                    if (!acc[task.responsible]) {
+                        acc[task.responsible] = { expected: 0, spent: 0 };
+                    }
+                    acc[task.responsible].expected += task.expectedTime;
+                    acc[task.responsible].spent += task.timeSpent / 3600000;
+                }
+                return acc;
+            }, {});
+
+            const labels = Object.keys(effortByCollaborator);
+            const efficiencyData = labels.map(label => {
+                const collaborator = effortByCollaborator[label];
+                if (collaborator.spent === 0) return 0; // Evita divisão por zero
+                return ((collaborator.expected / collaborator.spent) * 100).toFixed(1);
+            });
+            
+            const backgroundColors = efficiencyData.map(eff => {
+                if (eff >= 100) return 'rgba(75, 192, 192, 0.6)';
+                if (eff >= 80) return 'rgba(255, 206, 86, 0.6)';
+                return 'rgba(255, 99, 132, 0.6)';
+            });
+
+            const data = {
+                labels,
+                datasets: [{
+                    label: 'Eficiência (%)',
+                    data: efficiencyData,
+                    backgroundColor: backgroundColors,
+                    borderColor: backgroundColors.map(c => c.replace('0.6', '1')),
+                    borderWidth: 1
+                }]
+            };
+
+            createOrUpdateChart('efficiencyChart', 'bar', 'Eficiência por Colaborador (Previsto vs. Realizado)', data, {
+                indexAxis: 'y',
+                scales: { x: { title: { display: true, text: 'Eficiência (%)' } } },
+                plugins: {
+                    legend: { display: false }
+                }
+            });
+        };
+
+        const renderDashboard = (tasksToRender) => {
+            processColorMap.clear();
+            nextColorIndex = 0;
+
+            if (tasksToRender.length === 0) {
+                elements.kpis.cycleTime.textContent = '-- dias';
+                elements.kpis.leadTime.textContent = '-- dias';
+                elements.kpis.throughput.textContent = '-- itens';
+            } else {
+                const msPerDay = 86400000;
+                let totalLeadTime = 0;
+                const tasksWithCreationDate = tasksToRender.filter(t => t.createdAt);
+                
+                tasksWithCreationDate.forEach(t => {
+                    totalLeadTime += (t.completedAt ? new Date(t.completedAt) : new Date()) - new Date(t.createdAt);
+                });
+                elements.kpis.leadTime.textContent = `${tasksWithCreationDate.length > 0 ? (totalLeadTime / tasksWithCreationDate.length / msPerDay).toFixed(1) : '--'} dias`;
+
+                const startedAndCompletedTasks = tasksToRender.filter(t => t.startedAt && t.completedAt);
+                let totalCycleTime = 0;
+                startedAndCompletedTasks.forEach(t => {
+                    totalCycleTime += new Date(t.completedAt) - new Date(t.startedAt);
+                });
+                elements.kpis.cycleTime.textContent = `${startedAndCompletedTasks.length > 0 ? (totalCycleTime / startedAndCompletedTasks.length / msPerDay).toFixed(1) : '--'} dias`;
+
+                const sevenDaysAgo = new Date(Date.now() - 7 * msPerDay);
+                elements.kpis.throughput.textContent = `${tasksToRender.filter(t => t.completedAt && new Date(t.completedAt) >= sevenDaysAgo).length} itens`;
+            }
+
+            renderWipTracker(tasksToRender);
+            renderCumulativeFlowDiagram();
+            renderTimeEvolutionChart(tasksToRender);
+            populateTimeLogWeekSelector();
+            renderTimeLogCharts();
+            if (currentView === 'manager') {
+                renderEffortAnalysisChart(tasksToRender);
+                renderEfficiencyChart(tasksToRender);
+            }
+
+            const responsibleCounts = tasksToRender.filter(t => t.responsible).reduce((acc, task) => ({ ...acc,
+                [task.responsible]: (acc[task.responsible] || 0) + 1
+            }), {});
+            const sortedResponsaveis = Object.entries(responsibleCounts).sort((a, b) => a[1] - b[1]).slice(-10);
+            createOrUpdateChart('responsaveisChart', 'bar', 'Demandas por Responsável (Top 10)', {
+                labels: sortedResponsaveis.map(item => item[0]),
+                datasets: [{
+                    label: 'Nº de Demandas',
+                    data: sortedResponsaveis.map(item => item[1]),
+                    backgroundColor: '#60a5fa'
+                }]
+            }, {
+                indexAxis: 'y',
+                plugins: {
+                    legend: {
+                        display: false
                     }
                 }
+            });
+
+            const statusCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({ ...acc,
+                [status]: tasksToRender.filter(t => t.status === status).length
+            }), {});
+            createOrUpdateChart('statusDistributionChart', 'radar', 'Distribuição de Demandas por Status', {
+                labels: Object.values(STATUS_OPTIONS),
+                datasets: [{
+                    label: 'Nº de Demandas',
+                    data: Object.values(statusCounts),
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgba(54, 162, 235, 1)',
+                    fill: true
+                }]
+            });
+
+            const nucleusCounts = tasksToRender.filter(t => t.nucleus).reduce((acc, task) => ({ ...acc,
+                [task.nucleus]: (acc[task.nucleus] || 0) + 1
+            }), {});
+            createOrUpdateChart('nucleoChart', 'doughnut', 'Demandas por Núcleo', {
+                labels: Object.keys(nucleusCounts),
+                datasets: [{
+                    data: Object.values(nucleusCounts),
+                    backgroundColor: ['#6366f1', '#f59e0b', '#10b981']
+                }]
+            });
+        };
+
+        const createOrUpdateChart = (canvasId, type, title, data, customOptions = {}) => {
+            const ctx = document.getElementById(canvasId)?.getContext('2d');
+            if(!ctx) return;
+
+            if (chartObjects[canvasId]) chartObjects[canvasId].destroy();
+            
+            let defaultScales = {};
+            if (type === 'bar' || type === 'line') defaultScales = { y: { ticks: { color: '#d1d5db', beginAtZero: true }, grid: { color: '#4b5563' } }, x: { ticks: { color: '#d1d5db' }, grid: { color: '#4b5563' } } };
+            else if (type === 'radar') defaultScales = { r: { angleLines: { color: '#4b5563' }, grid: { color: '#4b5563' }, pointLabels: { color: '#d1d5db', font: { size: 12 } }, ticks: { color: '#d1d5db', backdropColor: 'rgba(0, 0, 0, 0.5)', beginAtZero: true } } };
+
+            const options = { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: title, color: '#ffffff', font: { size: 18 } }, legend: { labels: { color: '#d1d5db' } } }, scales: defaultScales, ...customOptions };
+            if (customOptions.scales) options.scales = { ...defaultScales, ...customOptions.scales };
+
+            chartObjects[canvasId] = new Chart(ctx, { type, data, options });
+        };
+        
+        const updateHistory = async () => {
+            if (tasks.length === 0) return;
+            
+            const todayStr = new Date().toISOString().split('T')[0];
+            const lastEntry = history.length > 0 ? history[history.length - 1] : null;
+            
+            const dailyCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({...acc, [status]: tasks.filter(t => t.status === status).length}), {});
+
+            if (lastEntry && lastEntry.date === todayStr) {
+                // Update today's entry
+                const docRef = doc(historyCollection, lastEntry.id);
+                await setDoc(docRef, { ...dailyCounts, date: todayStr });
+            } else {
+                // Add a new entry for today
+                await addDoc(historyCollection, { ...dailyCounts, date: todayStr });
+            }
+        };
+
+        const renderCumulativeFlowDiagram = () => {
+            if (!document.getElementById('cumulativeFlowChart')) return;
+            if (history.length < 1) {
+                createOrUpdateChart('cumulativeFlowChart', 'line', 'Diagrama de Fluxo Cumulativo (CFD) - Semanal', { labels: [], datasets: [] });
+                return;
+            }
+            const allWeeklyLabels = [...new Set(history.map(day => getWeekLabel(new Date(day.date))))].sort(sortWeekLabels);
+            const weeklyData = {};
+            history.forEach(day => { weeklyData[getWeekLabel(new Date(day.date))] = day; });
+            
+            const statusOrder = ['concluido', 'validacao', 'andamento', 'fazer', 'backlog', 'triagem'];
+            const statusColors = { triagem: 'rgba(107, 114, 128, 0.7)', backlog: 'rgba(234, 179, 8, 0.7)', fazer: 'rgba(59, 130, 246, 0.7)', andamento: 'rgba(139, 92, 246, 0.7)', validacao: 'rgba(99, 102, 241, 0.7)', concluido: 'rgba(16, 185, 129, 0.7)' };
+            const datasets = statusOrder.map(status => ({
+                label: STATUS_OPTIONS[status],
+                data: allWeeklyLabels.map(label => weeklyData[label] ? (weeklyData[label][status] || 0) : 0),
+                borderColor: statusColors[status].replace('0.7', '1'), backgroundColor: statusColors[status], fill: true, tension: 0.1
+            }));
+            createOrUpdateChart('cumulativeFlowChart', 'line', 'Diagrama de Fluxo Cumulativo (CFD) - Semanal', { labels: allWeeklyLabels, datasets }, { scales: { y: { stacked: true } }, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'top' } } });
+        };
+
+        const toggleCompletionDateVisibility = () => {
+            elements.modal.completionDateWrapper.style.display = elements.modal.status.value === 'concluido' ? 'block' : 'none';
+        };
+
+        const openModal = (taskId = null) => {
+            const { modal } = elements;
+            modal.form.reset();
+            modal.gut.fields.classList.add('hidden'); modal.rice.fields.classList.add('hidden');
+            modal.responsible.innerHTML = '<option value="">Ninguém atribuído</option>' + teamMembers.map(m => `<option value="${m}">${m}</option>`).join('');
+            modal.status.innerHTML = Object.entries(STATUS_OPTIONS).map(([key, value]) => `<option value="${key}">${value}</option>`).join('');
+
+            if (taskId) {
+                const task = tasks.find(t => t.id === taskId);
+                modal.title.textContent = "Editar Demanda";
+                modal.id.value = task.id; modal.demandTitle.value = task.title; modal.status.value = task.status;
+                modal.responsible.value = task.responsible || ''; modal.nucleus.value = task.nucleus || '';
+                modal.description.value = task.description || ''; modal.type.value = task.demandType || 'problema';
+                
+                if (task.completedAt) {
+                    const d = new Date(task.completedAt); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+                    modal.completionDate.value = d.toISOString().slice(0, 16);
+                } else modal.completionDate.value = '';
+
+                const originalData = task.originalData || {};
+                modal.originalDataContent.innerHTML = Object.entries({ 'ID': originalData.ID_REF, 'Solicitado por': originalData['Solicitado por'], 'Status Planilha': originalData.Status, 'Prioridade Planilha': originalData.Prioridade }).map(([key, value]) => `<div class="truncate"><strong class="text-gray-400">${key}:</strong><br>${value || 'N/A'}</div>`).join('');
+                
+                modal.critScore.textContent = (task.scoreGUT || task.scoreRICE || 0).toFixed(1);
+                modal.critReclamacoes.textContent = task.reclamacoes30d || 0;
+                modal.critPrazo.textContent = formatDate(task.createdAt);
+
+                modal.gut.g.value = task.gut?.g || ''; modal.gut.u.value = task.gut?.u || ''; modal.gut.t.value = task.gut?.t || '';
+                modal.deleteBtn.classList.remove('hidden');
+            } else {
+                modal.title.textContent = "Nova Demanda"; modal.id.value = ''; modal.status.value = 'triagem';
+                modal.deleteBtn.classList.add('hidden'); modal.originalDataContent.innerHTML = '';
+                modal.critScore.textContent = '--'; modal.critReclamacoes.textContent = '--'; modal.critPrazo.textContent = '--';
+            }
+
+            updatePrioritizationView();
+            toggleCompletionDateVisibility();
+            modal.container.classList.remove('hidden'); modal.container.classList.add('flex');
+        };
+
+        const closeModal = () => {
+            elements.modal.container.classList.add('hidden');
+            elements.modal.container.classList.remove('flex');
+        };
+
+        const handleFormSubmit = async (e) => {
+            e.preventDefault();
+            const { modal } = elements;
+            const id = modal.id.value;
+            
+            const taskData = {
+                title: modal.demandTitle.value, status: modal.status.value, responsible: modal.responsible.value,
+                nucleus: modal.nucleus.value, description: modal.description.value, demandType: modal.type.value,
             };
 
-            const handleFormSubmit = async (e) => {
-                e.preventDefault();
-                const { modal } = elements;
-                const id = modal.id.value;
-                
-                const taskData = {
-                    title: modal.demandTitle.value,
-                    status: modal.status.value,
-                    responsible: modal.responsible.value,
-                };
+            showLoading('Salvando...');
+            try {
+                if (id) { // Editando
+                    const taskRef = doc(tasksCollection, id);
+                    const task = tasks.find(t => t.id === id);
+                    const oldStatus = task.status;
 
+                    const updatedTask = { ...task, ...taskData };
+                    
+                    if (updatedTask.demandType === 'problema') {
+                        updatedTask.gut = { g: parseInt(modal.gut.g.value) || 0, u: parseInt(modal.gut.u.value) || 0, t: parseInt(modal.gut.t.value) || 0 };
+                        updatedTask.scoreGUT = calculateGUT(false); updatedTask.scoreRICE = null;
+                    } else if (updatedTask.demandType === 'melhoria') {
+                        updatedTask.rice = { reach: parseInt(modal.rice.reach.value) || 0, impact: parseFloat(modal.rice.impact.value) || 0, confidence: parseFloat(modal.rice.confidence.value) || 0, effort: parseFloat(modal.rice.effort.value) || 1 };
+                        updatedTask.scoreRICE = calculateRICE(false); updatedTask.scoreGUT = null; updatedTask.gut = {};
+                    }
+                    
+                    if (oldStatus === 'triagem' && (updatedTask.scoreGUT > 0 || updatedTask.scoreRICE > 0)) {
+                        updatedTask.status = 'backlog';
+                    }
+
+                    if (updatedTask.status === 'concluido') {
+                        if (modal.completionDate.value) updatedTask.completedAt = new Date(modal.completionDate.value).toISOString();
+                        else if (oldStatus !== 'concluido' && !updatedTask.completedAt) updatedTask.completedAt = new Date().toISOString();
+                    } else {
+                        updatedTask.completedAt = null;
+                    }
+                    if (oldStatus !== 'andamento' && updatedTask.status === 'andamento' && !updatedTask.startedAt) {
+                        updatedTask.startedAt = new Date().toISOString();
+                    }
+
+                    await setDoc(taskRef, updatedTask, { merge: true });
+                } else { // Criando
+                    const newTask = {
+                        createdAt: new Date().toISOString(),
+                        originalData: {},
+                        timeSpent: 0,
+                        isTiming: false,
+                        lastStartTime: null,
+                        playCount: 0,
+                        ...taskData
+                    };
+                    if (newTask.demandType === 'problema') {
+                        newTask.gut = { g: parseInt(modal.gut.g.value) || 0, u: parseInt(modal.gut.u.value) || 0, t: parseInt(modal.gut.t.value) || 0 };
+                        newTask.scoreGUT = calculateGUT(false);
+                    } else if (newTask.demandType === 'melhoria') {
+                        newTask.rice = { reach: parseInt(modal.rice.reach.value) || 0, impact: parseFloat(modal.rice.impact.value) || 0, confidence: parseFloat(modal.rice.confidence.value) || 0, effort: parseFloat(modal.rice.effort.value) || 1 };
+                        newTask.scoreRICE = calculateRICE(false);
+                    }
+                    if (newTask.status === 'triagem' && (newTask.scoreGUT > 0 || newTask.scoreRICE > 0)) {
+                        newTask.status = 'backlog';
+                    }
+                    await addDoc(tasksCollection, newTask);
+                }
+                closeModal();
+            } catch (error) {
+                console.error("Erro ao salvar demanda:", error);
+                alert("Ocorreu um erro ao salvar a demanda.");
+            } finally {
+                hideLoading();
+            }
+        };
+
+        const calculateGUT = (render = true) => {
+            const { g, u, t, formula, score } = elements.modal.gut;
+            const G = parseInt(g.value, 10) || 0, U = parseInt(u.value, 10) || 0, T = parseInt(t.value, 10) || 0, result = G * U * T;
+            if (render) { formula.textContent = `${G} x ${U} x ${T} = ${result}`; score.textContent = result; }
+            return result;
+        };
+
+        const calculateRICE = (render = true) => {
+            const { reach, impact, confidence, effort, formula, score } = elements.modal.rice;
+            const R = parseInt(reach.value, 10) || 0, I = parseFloat(impact.value) || 0, C = parseFloat(confidence.value) || 0, E = parseFloat(effort.value) || 1, result = E > 0 ? (R * I * C) / E : 0;
+            if (render) { formula.textContent = `(${R} x ${I} x ${C}) / ${E} = ${result.toFixed(1)}`; score.textContent = result.toFixed(1); }
+            return result;
+        };
+        
+        const updatePrioritizationView = () => {
+            const type = elements.modal.type.value;
+            elements.modal.gut.fields.classList.toggle('hidden', type !== 'problema');
+            elements.modal.rice.fields.classList.toggle('hidden', type !== 'melhoria');
+            if (type === 'problema') calculateGUT(); else if (type === 'melhoria') calculateRICE();
+        };
+        
+        const handleSortChange = () => {
+            currentSort.by = elements.kanbanSortBy.value; currentSort.direction = elements.kanbanSortDirection.value;
+            renderBoard(getFilteredTasks());
+        };
+
+        const handlePlay = async (taskId) => {
+            const task = tasks.find(t => t.id === taskId);
+            if (task) {
+                const updatedData = {
+                    status: 'andamento',
+                    isTiming: true,
+                    lastStartTime: new Date().toISOString()
+                };
+                if (!task.isTiming) {
+                    updatedData.playCount = (task.playCount || 0) + 1;
+                }
+                if (!task.startedAt) {
+                    updatedData.startedAt = updatedData.lastStartTime;
+                }
+                const taskRef = doc(tasksCollection, taskId);
+                await setDoc(taskRef, updatedData, { merge: true });
+            }
+        };
+        
+        const handlePause = async (taskId) => {
+            const task = tasks.find(t => t.id === taskId);
+            if (task && task.isTiming) {
+                const elapsed = Date.now() - new Date(task.lastStartTime).getTime();
+                const newTimeSpent = (task.timeSpent || 0) + elapsed;
+                
+                const taskRef = doc(tasksCollection, taskId);
+                await setDoc(taskRef, {
+                    timeSpent: newTimeSpent,
+                    isTiming: false,
+                    lastStartTime: null
+                }, { merge: true });
+                
+                if (elapsed > 100) {
+                    await addDoc(timeLogCollection, { 
+                        timestamp: new Date().toISOString(), 
+                        responsible: task.responsible, 
+                        process: task.process || 'Não Definido', 
+                        duration: elapsed 
+                    });
+                }
+            }
+        };
+
+        const renderCatalog = () => {
+            const container = elements.catalog.container;
+            const demandCounts = tasks.reduce((acc, task) => {
+                const activityName = task.originalData['Atividade'];
+                if(activityName) {
+                    acc[activityName] = (acc[activityName] || 0) + 1;
+                }
+                return acc;
+            }, {});
+
+            const table = `
+                <table class="w-full text-left">
+                    <thead>
+                        <tr>
+                            <th class="p-2 border-b border-gray-700 w-2/5">Nome da Atividade</th>
+                            <th class="p-2 border-b border-gray-700">Processo</th>
+                            <th class="p-2 border-b border-gray-700">Função</th>
+                            <th class="p-2 border-b border-gray-700">Tempo Previsto (h)</th>
+                            <th class="p-2 border-b border-gray-700">Qtd. Demandas</th>
+                            <th class="p-2 border-b border-gray-700">Nec. Anual</th>
+                            <th class="p-2 border-b border-gray-700">% Realização</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${activityCatalog.map(activity => `
+                            <tr data-activity-id="${activity.id}" class="hover:bg-gray-700 cursor-pointer">
+                                <td class="p-2 border-b border-gray-700">${activity.name}</td>
+                                <td class="p-2 border-b border-gray-700">${activity.data.process}</td>
+                                <td class="p-2 border-b border-gray-700">${activity.data.role}</td>
+                                <td class="p-2 border-b border-gray-700">${activity.data.time}</td>
+                                <td class="p-2 border-b border-gray-700">${demandCounts[activity.name] || 0}</td>
+                                <td class="p-2 border-b border-gray-700">${activity.data.annualNeed}</td>
+                                <td class="p-2 border-b border-gray-700">${activity.data.executionPercentage}%</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            container.innerHTML = table;
+        };
+
+        const renderHC = () => {
+            const hoursPerHC = parseFloat(elements.hc.hoursInput.value) || 191;
+            const productivityFactor = (parseFloat(elements.hc.productivityFactor.value) || 80) / 100;
+            const effectiveHours = hoursPerHC * productivityFactor;
+
+            let hours = {
+                base: { eng: 0, tec: 0 },
+                current: { eng: 0, tec: 0 },
+                annual: { eng: 0, tec: 0 },
+                real: { eng: 0, tec: 0 }
+            };
+
+            activityCatalog.forEach(activity => {
+                const { time, annualNeed, executionPercentage, role } = activity.data;
+                
+                if (role === 'Eng') {
+                    hours.base.eng += time;
+                    hours.annual.eng += time * annualNeed;
+                    hours.real.eng += time * annualNeed * (executionPercentage / 100);
+                } else if (role === 'Tec') {
+                    hours.base.tec += time;
+                    hours.annual.tec += time * annualNeed;
+                    hours.real.tec += time * annualNeed * (executionPercentage / 100);
+                } else if (role === 'Eng/Tec') {
+                    hours.base.eng += time * 0.5;
+                    hours.base.tec += time * 0.5;
+                    hours.annual.eng += (time * annualNeed) * 0.5;
+                    hours.annual.tec += (time * annualNeed) * 0.5;
+                    hours.real.eng += (time * annualNeed * (executionPercentage / 100)) * 0.5;
+                    hours.real.tec += (time * annualNeed * (executionPercentage / 100)) * 0.5;
+                }
+            });
+
+            tasks.forEach(task => {
+                const { expectedTime, role } = task;
+                if(role === 'Eng') hours.current.eng += expectedTime;
+                else if (role === 'Tec') hours.current.tec += expectedTime;
+                else if (role === 'Eng/Tec') {
+                    hours.current.eng += expectedTime * 0.5;
+                    hours.current.tec += expectedTime * 0.5;
+                }
+            });
+            
+            document.getElementById('summary-base-eng').textContent = hours.base.eng.toFixed(2);
+            document.getElementById('summary-base-tec').textContent = hours.base.tec.toFixed(2);
+            document.getElementById('summary-base-total').textContent = (hours.base.eng + hours.base.tec).toFixed(2);
+
+            document.getElementById('summary-current-eng').textContent = hours.current.eng.toFixed(2);
+            document.getElementById('summary-current-tec').textContent = hours.current.tec.toFixed(2);
+            document.getElementById('summary-current-total').textContent = (hours.current.eng + hours.current.tec).toFixed(2);
+            
+            const monthlyAnnualEng = hours.annual.eng / 12;
+            const monthlyAnnualTec = hours.annual.tec / 12;
+            document.getElementById('summary-annual-eng').textContent = monthlyAnnualEng.toFixed(2);
+            document.getElementById('summary-annual-tec').textContent = monthlyAnnualTec.toFixed(2);
+            document.getElementById('summary-annual-total').textContent = (monthlyAnnualEng + monthlyAnnualTec).toFixed(2);
+
+            const monthlyRealEng = hours.real.eng / 12;
+            const monthlyRealTec = hours.real.tec / 12;
+            document.getElementById('summary-real-eng').textContent = monthlyRealEng.toFixed(2);
+            document.getElementById('summary-real-tec').textContent = monthlyRealTec.toFixed(2);
+            document.getElementById('summary-real-total').textContent = (monthlyRealEng + monthlyRealTec).toFixed(2);
+
+            const calculateHC = (totalHours) => effectiveHours > 0 ? (totalHours / effectiveHours) : 0;
+            
+            elements.hc.baseEng.textContent = calculateHC(hours.base.eng).toFixed(2);
+            elements.hc.baseTec.textContent = calculateHC(hours.base.tec).toFixed(2);
+            elements.hc.baseTotal.textContent = calculateHC(hours.base.eng + hours.base.tec).toFixed(2);
+            
+            elements.hc.currentEng.textContent = calculateHC(hours.current.eng).toFixed(2);
+            elements.hc.currentTec.textContent = calculateHC(hours.current.tec).toFixed(2);
+            elements.hc.currentTotal.textContent = calculateHC(hours.current.eng + hours.current.tec).toFixed(2);
+
+            elements.hc.annualEng.textContent = calculateHC(hours.annual.eng / 12).toFixed(2);
+            elements.hc.annualTec.textContent = calculateHC(hours.annual.tec / 12).toFixed(2);
+            elements.hc.annualTotal.textContent = calculateHC((hours.annual.eng + hours.annual.tec) / 12).toFixed(2);
+            
+            elements.hc.realEng.textContent = calculateHC(hours.real.eng / 12).toFixed(2);
+            elements.hc.realTec.textContent = calculateHC(hours.real.tec / 12).toFixed(2);
+            elements.hc.realTotal.textContent = calculateHC((hours.real.eng + hours.real.tec) / 12).toFixed(2);
+            
+            const hoursByProcess = activityCatalog.reduce((acc, activity) => {
+                const {process, time, annualNeed, role} = activity.data;
+                if (!acc[process]) acc[process] = { eng: 0, tec: 0 };
+                const annualHours = time * annualNeed;
+                if(role === 'Eng') acc[process].eng += annualHours;
+                else if(role === 'Tec') acc[process].tec += annualHours;
+                else if(role === 'Eng/Tec') {
+                    acc[process].eng += annualHours * 0.5;
+                    acc[process].tec += annualHours * 0.5;
+                }
+                return acc;
+            }, {});
+            
+            const sortedProcesses = Object.keys(hoursByProcess).sort((a,b) => (hoursByProcess[b].eng + hoursByProcess[b].tec) - (hoursByProcess[a].eng + hoursByProcess[a].tec));
+
+            createOrUpdateChart('hc-process-chart', 'bar', 'Horas Anuais Previstas por Processo', {
+                labels: sortedProcesses,
+                datasets: [
+                    {
+                        label: 'Engenheiro (h)',
+                        data: sortedProcesses.map(p => hoursByProcess[p].eng.toFixed(2)),
+                        backgroundColor: '#3b82f6'
+                    },
+                    {
+                        label: 'Técnico (h)',
+                        data: sortedProcesses.map(p => hoursByProcess[p].tec.toFixed(2)),
+                        backgroundColor: '#10b981'
+                    }
+                ]
+            }, {
+                indexAxis: 'y',
+                scales: { 
+                    y: { ticks: { font: { size: 10 } }, stacked: true }, 
+                    x: { title: { display: true, text: 'Horas' }, stacked: true } 
+                },
+                plugins: { legend: { display: true } }
+            });
+        };
+        
+        const openCatalogModal = (activityId = null) => {
+            const { catalog } = elements;
+            catalog.form.reset();
+            if (activityId) {
+                const activity = activityCatalog.find(act => act.id === activityId);
+                catalog.title.textContent = 'Editar Atividade';
+                catalog.activityId.value = activityId;
+                catalog.editName.value = activity.name;
+                catalog.editProcess.value = activity.data.process;
+                catalog.editRole.value = activity.data.role;
+                catalog.editTime.value = activity.data.time;
+                catalog.editAnnualNeed.value = activity.data.annualNeed;
+                catalog.editExecPercentage.value = activity.data.executionPercentage;
+                catalog.deleteBtn.classList.remove('hidden');
+            } else {
+                catalog.title.textContent = 'Nova Atividade';
+                catalog.activityId.value = '';
+                catalog.deleteBtn.classList.add('hidden');
+            }
+            catalog.modal.classList.remove('hidden');
+            catalog.modal.classList.add('flex');
+        };
+
+        const closeCatalogModal = () => {
+            elements.catalog.modal.classList.add('hidden');
+            elements.catalog.modal.classList.remove('flex');
+        };
+
+        const handleCatalogFormSubmit = async (e) => {
+            e.preventDefault();
+            const { catalog } = elements;
+            const activityId = catalog.activityId.value;
+            const newName = catalog.editName.value.trim();
+            
+            const activityData = {
+                process: catalog.editProcess.value.trim(),
+                role: catalog.editRole.value,
+                time: parseFloat(catalog.editTime.value) || 0,
+                annualNeed: parseInt(catalog.editAnnualNeed.value) || 0,
+                executionPercentage: parseInt(catalog.editExecPercentage.value) || 100
+            };
+
+            if (!newName || !activityData.process || activityData.time <= 0) {
+                alert('Por favor, preencha todos os campos com valores válidos.');
+                return;
+            }
+
+            const existingActivity = activityCatalog.find(act => act.name === newName && act.id !== activityId);
+            if (existingActivity) {
+                alert('Erro: Já existe uma atividade com este nome.');
+                return;
+            }
+            
+            showLoading('Salvando atividade...');
+            try {
+                if (activityId) {
+                    const docRef = doc(catalogCollection, activityId);
+                    await setDoc(docRef, { name: newName, data: activityData });
+                } else {
+                    await addDoc(catalogCollection, { name: newName, data: activityData });
+                }
+                closeCatalogModal();
+            } catch (error) {
+                console.error("Erro ao salvar atividade:", error);
+                alert("Ocorreu um erro ao salvar a atividade.");
+            } finally {
+                hideLoading();
+            }
+        };
+
+        const handleDeleteActivity = async () => {
+            const activityId = elements.catalog.activityId.value;
+            const activity = activityCatalog.find(act => act.id === activityId);
+            if (activity && confirm(`Tem certeza que deseja excluir a atividade "${activity.name}"?`)) {
+                showLoading('Excluindo...');
                 try {
-                    if (id) {
-                        const taskDocRef = firebase.doc(db, tasksCollectionRef.path, id);
-                        await firebase.updateDoc(taskDocRef, taskData);
-                    } else {
-                        await firebase.addDoc(tasksCollectionRef, {
-                            ...taskData,
-                            createdAt: new Date().toISOString()
-                        });
-                    }
-                    closeModal();
-                } catch (error) {
-                    console.error("Erro ao salvar demanda:", error);
-                    alert("Não foi possível salvar a demanda.");
+                    await deleteDoc(doc(catalogCollection, activityId));
+                    closeCatalogModal();
+                } catch(error) {
+                    console.error("Erro ao excluir:", error);
+                    alert("Falha ao excluir a atividade.");
+                } finally {
+                    hideLoading();
                 }
-            };
+            }
+        };
+
+        const applyView = (view) => {
+            currentView = view;
+            const isManagerView = view === 'manager';
             
-            const populateGlobalFilters = () => {
-                const filtersContainer = elements.globalFilters;
-                filtersContainer.innerHTML = '';
-                
-                teamMembers = [...new Set(tasks.map(t => t.responsible).filter(Boolean))].sort();
+            elements.viewToggle.checked = isManagerView;
+            localStorage.setItem('kanbanView', view);
 
-                const filterConfigs = [
-                    { key: 'ID_REF', label: 'ID (REF)', type: 'text' },
-                    { key: 'status', label: 'Status Kanban', values: Object.keys(STATUS_OPTIONS) },
-                    { key: 'responsible', label: 'Responsável', values: teamMembers },
-                    { key: 'Núcleo', label: 'Núcleo' },
-                ];
-
-                filterConfigs.forEach(config => {
-                    const filterWrapper = document.createElement('div');
-                    
-                    if (config.type === 'text') {
-                        filterWrapper.innerHTML = `<label for="filter-${config.key}" class="block text-xs font-medium text-gray-400 mb-1">${config.label}</label><input type="text" id="filter-${config.key}" data-filter-key="${config.key}" class="global-filter w-full p-2 rounded bg-gray-700 border border-gray-600 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">`;
-                    } else {
-                        const values = config.values || [...new Set(tasks.map(t => t.originalData?.[config.key]).filter(Boolean))].sort();
-                        if (values.length === 0) return;
-
-                        const options = config.key === 'status'
-                            ? values.map(val => `<option value="${val}">${STATUS_OPTIONS[val]}</option>`).join('')
-                            : values.map(val => `<option value="${val}">${val}</option>`).join('');
-
-                        filterWrapper.innerHTML = `<label for="filter-${config.key}" class="block text-xs font-medium text-gray-400 mb-1">${config.label}</label><select id="filter-${config.key}" data-filter-key="${config.key}" class="global-filter w-full p-2 rounded bg-gray-700 border border-gray-600 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"><option value="">Todos</option>${options}</select>`;
-                    }
-                    filtersContainer.appendChild(filterWrapper);
-                });
-            };
-
-            const switchTab = (activeTabId) => {
-                Object.values(elements.views).forEach(view => view.classList.add('hidden'));
-                Object.values(elements.tabs).forEach(tab => tab.classList.remove('active'));
-                elements.views[activeTabId].classList.remove('hidden');
-                elements.tabs[activeTabId].classList.add('active');
-                renderActiveTabView();
-            };
-
-            const renderActiveTabView = () => {
-                const activeTab = document.querySelector('.tab-btn.active').id.replace('tab-', '');
-                const filteredTasks = tasks; 
-                if (activeTab === 'dashboard') renderDashboard(filteredTasks);
-                else if (activeTab === 'demandas') renderTable(filteredTasks);
-                else if (activeTab === 'kanban') renderBoard(filteredTasks);
-            };
-
-            const renderDashboard = (tasksToRender) => {
-                // Lógica de renderização do dashboard
-            };
-
-            const renderTable = (tasksToRender) => {
-                // Lógica de renderização da tabela
-            };
-
-            const renderBoard = (tasksToRender) => {
-                elements.kanbanColumns.forEach(col => col.innerHTML = '');
-                tasksToRender.forEach(task => {
-                    const column = document.getElementById(`column-${task.status}`);
-                    if (column) column.innerHTML += `<div class="kanban-card bg-gray-700 p-2 rounded shadow">${task.title}</div>`;
-                });
-            };
+            elements.tabs.hc.style.display = isManagerView ? 'flex' : 'none';
+            elements.effortAnalysisChartContainer.style.display = isManagerView ? 'block' : 'none';
+            elements.efficiencyChartContainer.style.display = isManagerView ? 'block' : 'none';
             
-            const closeModal = () => {
-                elements.modal.container.classList.add('hidden');
-                elements.modal.container.classList.remove('flex');
-            };
-            
-            const openModal = (taskId = null) => {
-                // Lógica para abrir modal
-            };
+            if (!isManagerView && document.querySelector('.tab-btn.active')?.id === 'tab-hc') {
+                switchTab('dashboard');
+            } else {
+                renderActiveTabView(); // Re-render to show/hide charts
+            }
+        };
 
-            const loadDataAndInitApp = () => {
-                unsubscribeConfig = firebase.onSnapshot(configDocRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        const configData = docSnap.data();
-                        activityCatalog = configData.catalog || defaultActivityCatalog;
-                    } else {
-                        firebase.setDoc(configDocRef, { catalog: defaultActivityCatalog, managers: [userId] });
-                    }
-                });
-
-                unsubscribeTasks = firebase.onSnapshot(tasksCollectionRef, (querySnapshot) => {
-                    const newTasks = [];
-                    querySnapshot.forEach((doc) => {
-                        newTasks.push({ id: doc.id, ...doc.data() });
-                    });
-                    tasks = newTasks;
-                    
-                    if (!dataLoaded) {
-                        populateGlobalFilters();
-                        dataLoaded = true;
-                    }
-                    
-                    renderActiveTabView();
-                });
-
-                setupEventListeners();
-                startUITimer();
-            };
-
-             const setupEventListeners = () => {
-                Object.keys(elements.tabs).forEach(key => elements.tabs[key].addEventListener('click', () => switchTab(key)));
-                elements.addDemandBtn.addEventListener('click', () => openModal());
-                elements.importBtn.addEventListener('click', () => elements.fileInput.click());
-                elements.fileInput.addEventListener('change', handleImport);
-                elements.clearDataBtn.addEventListener('click', clearData);
-                elements.modal.form.addEventListener('submit', handleFormSubmit);
-            };
-
-            const startUITimer = () => {
-                 clearInterval(timerInterval);
-                 timerInterval = setInterval(() => {
-                 }, 1000);
-            };
-
-            const initFirebase = async () => {
-                firebase.onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        console.log("Usuário autenticado:", userId);
-
-                        tasksCollectionRef = firebase.collection(db, `artifacts/${appId}/public/data/tasks`);
-                        configDocRef = firebase.doc(db, `artifacts/${appId}/public/data/appConfig/main`);
-
-                        const configSnap = await firebase.getDoc(configDocRef);
-                        isManager = configSnap.exists() && configSnap.data().managers?.includes(userId);
+        const setupEventListeners = () => {
+            Object.keys(elements.tabs).forEach(key => elements.tabs[key].addEventListener('click', () => switchTab(key)));
+            elements.addDemandBtn.addEventListener('click', () => openModal());
+            elements.exportBtn.addEventListener('click', handleExport);
+            elements.timeLogWeekSelector.addEventListener('change', renderTimeLogCharts);
+            elements.viewToggle.addEventListener('change', () => applyView(elements.viewToggle.checked ? 'manager' : 'team'));
+            elements.modal.cancelBtn.addEventListener('click', closeModal);
+            elements.modal.closeBtn.addEventListener('click', closeModal); 
+            elements.modal.form.addEventListener('submit', handleFormSubmit);
+            elements.modal.status.addEventListener('change', toggleCompletionDateVisibility);
+            elements.importBtn.addEventListener('click', () => elements.fileInput.click());
+            elements.fileInput.addEventListener('change', handleImport);
+            elements.clearDataBtn.addEventListener('click', clearData);
+            elements.globalFilters.addEventListener('input', e => { if (e.target.classList.contains('global-filter')) renderActiveTabView(); });
+            elements.clearFiltersBtn.addEventListener('click', () => { document.querySelectorAll('.global-filter').forEach(f => f.value = ''); renderActiveTabView(); });
+            elements.kanbanSortBy.addEventListener('change', handleSortChange);
+            elements.kanbanSortDirection.addEventListener('change', handleSortChange);
+            elements.modal.type.addEventListener('change', updatePrioritizationView);
+            ['g', 'u', 't'].forEach(key => elements.modal.gut[key].addEventListener('input', () => calculateGUT()));
+            Object.keys(elements.modal.rice).forEach(key => { if(elements.modal.rice[key].addEventListener) elements.modal.rice[key].addEventListener('input', () => calculateRICE()); });
+            elements.kanbanBoard.addEventListener('click', e => {
+                const button = e.target.closest('button[data-action]');
+                if (button) {
+                    e.stopPropagation();
+                    const action = button.dataset.action;
+                    const id = button.dataset.id;
+                    if (action === 'play') handlePlay(id);
+                    if (action === 'pause') handlePause(id);
+                }
+            });
+            elements.kanbanColumns.forEach(column => {
+                column.addEventListener('dragover', e => e.preventDefault());
+                column.addEventListener('drop', async e => {
+                    e.preventDefault();
+                    const newStatus = column.dataset.status;
+                    const task = tasks.find(t => t.id === draggedTaskId);
+                    if (task && task.status !== newStatus) {
+                        const oldStatus = task.status;
+                        if (oldStatus === 'andamento' && task.isTiming) await handlePause(task.id);
                         
-                        elements.viewToggleContainer.style.display = isManager ? 'flex' : 'none';
+                        const updateData = { status: newStatus };
+                        if (newStatus === 'concluido' && !task.completedAt) {
+                            updateData.completedAt = new Date().toISOString();
+                        } else if (newStatus !== 'concluido') {
+                            updateData.completedAt = null;
+                        }
 
-                        loadDataAndInitApp();
-
-                    } else {
-                        console.log("Nenhum usuário logado.");
-                        unsubscribeTasks();
-                        unsubscribeConfig();
+                        if (newStatus === 'andamento' && !task.startedAt) {
+                            updateData.startedAt = new Date().toISOString();
+                        }
+                        
+                        const taskRef = doc(tasksCollection, task.id);
+                        await setDoc(taskRef, updateData, { merge: true });
                     }
                 });
+            });
+            
+            elements.catalog.container.addEventListener('click', (e) => {
+                const row = e.target.closest('tr');
+                if (row && row.dataset.activityId) {
+                    openCatalogModal(row.dataset.activityId);
+                }
+            });
+            elements.catalog.addBtn.addEventListener('click', () => openCatalogModal());
+            elements.catalog.form.addEventListener('submit', handleCatalogFormSubmit);
+            elements.catalog.cancelBtn.addEventListener('click', closeCatalogModal);
+            elements.catalog.deleteBtn.addEventListener('click', handleDeleteActivity);
+            elements.hc.hoursInput.addEventListener('input', renderHC);
+            elements.hc.productivityFactor.addEventListener('input', renderHC);
+        };
+        
+        async function populateDefaultCatalog() {
+            const batch = writeBatch(db);
+            Object.entries(defaultActivityCatalog).forEach(([name, data]) => {
+                const newDocRef = doc(catalogCollection);
+                batch.set(newDocRef, { name, data });
+            });
+            await batch.commit();
+        }
 
+        const initRealtimeListeners = () => {
+            if(unsubscribeTasks) unsubscribeTasks();
+            unsubscribeTasks = onSnapshot(query(tasksCollection), (snapshot) => {
+                tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Apenas recalcula os headers se for a primeira carga
+                if(allHeaders.length === 0 && tasks.length > 0) {
+                    const headerSet = new Set();
+                    tasks.forEach(task => {
+                        if(task.originalData) Object.keys(task.originalData).forEach(key => headerSet.add(key))
+                    });
+                    allHeaders = Array.from(headerSet);
+                }
+                populateGlobalFilters();
+                renderActiveTabView();
+                updateHistory();
+            }, (error) => {
+                console.error("Erro no listener de tarefas:", error);
+                alert("Não foi possível carregar as tarefas. Verifique sua conexão e as regras de segurança do Firestore.");
+            });
+
+            if(unsubscribeCatalog) unsubscribeCatalog();
+            unsubscribeCatalog = onSnapshot(query(catalogCollection), (snapshot) => {
+                activityCatalog = snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name, data: doc.data().data }));
+                if (document.querySelector('#tab-catalogo.active') || document.querySelector('#tab-hc.active')) {
+                    renderActiveTabView();
+                }
+            });
+
+            if(unsubscribeHistory) unsubscribeHistory();
+            unsubscribeHistory = onSnapshot(query(historyCollection), (snapshot) => {
+                history = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => new Date(a.date) - new Date(b.date));
+                 if (document.querySelector('#tab-dashboard.active')) {
+                    renderCumulativeFlowDiagram();
+                    renderTimeEvolutionChart(tasks);
+                }
+            });
+
+            if(unsubscribeTimeLog) unsubscribeTimeLog();
+            unsubscribeTimeLog = onSnapshot(query(timeLogCollection), (snapshot) => {
+                timeLog = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                if (document.querySelector('#tab-dashboard.active')) {
+                   populateTimeLogWeekSelector();
+                   renderTimeLogCharts();
+                }
+            });
+        };
+
+        const init = () => {
+            showLoading("Autenticando e conectando ao banco de dados...");
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    console.log("Usuário autenticado:", user.uid);
+                    
+                    const catalogSnapshot = await getDocs(query(catalogCollection));
+                    if (catalogSnapshot.empty) {
+                        showLoading("Configurando o catálogo inicial...");
+                        await populateDefaultCatalog();
+                    }
+                    
+                    initRealtimeListeners();
+                    
+                    const savedView = localStorage.getItem('kanbanView') || 'manager';
+                    applyView(savedView);
+                    
+                    clearInterval(timerInterval);
+                    timerInterval = setInterval(() => {
+                        tasks.forEach(task => {
+                            if (task.isTiming) {
+                                renderWipTracker(getFilteredTasks());
+                            }
+                        });
+                    }, 1000);
+
+                    setupEventListeners();
+                    hideLoading();
+                }
+            });
+
+            // Lógica de autenticação movida para fora do onAuthStateChanged para ser executada apenas uma vez
+            const performAuth = async () => {
+                if (auth.currentUser) {
+                    return; // Já autenticado
+                }
                 try {
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                         await firebase.signInWithCustomToken(auth, __initial_auth_token);
+                        console.log("Autenticando com token customizado...");
+                        await signInWithCustomToken(auth, __initial_auth_token);
                     } else {
-                         await firebase.signInAnonymously(auth);
+                        console.log("Nenhum usuário. Autenticando anonimamente...");
+                        await signInAnonymously(auth);
                     }
                 } catch (error) {
                     console.error("Erro na autenticação:", error);
-                    alert("Não foi possível conectar ao sistema.");
+                    alert("Falha ao conectar. Verifique as configurações do Firebase e se as credenciais estão corretas. O erro mais comum é uma API Key inválida.");
+                    hideLoading();
                 }
             };
-            initFirebase();
-        });
-    </script>
 
+            performAuth();
+        };
+
+        init();
+    });
+</script>
 </body>
 </html>
 
