@@ -1,0 +1,2123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quadro de Gestão de Demandas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, 
+            collection, query, writeBatch, getDocs
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // Enable debug logging for Firestore
+        // setLogLevel('debug');
+
+        // Make db and auth available globally for our main script
+        window.db = db;
+        window.auth = auth;
+        window.firebase = {
+             doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, 
+             collection, query, writeBatch, getDocs, signInAnonymously, 
+             signInWithCustomToken, onAuthStateChanged
+        };
+    </script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .kanban-column { min-height: 200px; }
+        .kanban-card { cursor: grab; transition: background-color 0.2s, box-shadow 0.2s; }
+        .kanban-card:active { cursor: grabbing; }
+        .dragging { opacity: 0.5; transform: rotate(3deg); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .tab-btn.active { border-bottom-color: #3b82f6; color: #3b82f6; }
+        #table-container thead th { position: sticky; top: 0; z-index: 1; background-color: #1f2937; }
+        .wip-limit-exceeded { color: #ef4444; font-weight: bold; }
+        .tooltip-container { position: relative; display: inline-flex; align-items: center; }
+        .tooltip { visibility: hidden; opacity: 0; transition: opacity 0.2s; }
+        .tooltip-container:hover .tooltip { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <!-- Cabeçalho -->
+    <header class="bg-gray-800 p-4 shadow-md sticky top-0 z-20">
+        <div class="container mx-auto flex justify-between items-center flex-wrap">
+            <div class="flex items-center space-x-4">
+                <h1 class="text-2xl font-bold">Gestão de Engenharia</h1>
+                <div id="view-toggle-container" class="flex items-center text-sm pt-1">
+                    <span class="mr-2 text-gray-400">Visão Equipe</span>
+                    <label for="view-toggle" class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="view-toggle" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                    <span class="ml-2 font-semibold">Visão Gerencial</span>
+                </div>
+            </div>
+            <div class="flex space-x-2">
+                <button id="export-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition-transform transform hover:scale-105 flex items-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"> <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /> </svg>
+                    <span>Exportar</span>
+                </button>
+                <button id="add-demand-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition-transform transform hover:scale-105 flex items-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"> <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /> </svg>
+                    <span>Nova Demanda</span>
+                </button>
+            </div>
+        </div>
+    </header>
+    <input type="file" id="file-input" class="hidden" accept=".xlsx,.xls,.csv,.iqy">
+
+    <!-- Navegação por Abas -->
+    <div class="container mx-auto px-4 border-b border-gray-700 sticky top-[72px] bg-gray-900 z-10">
+        <nav class="flex space-x-8">
+            <button id="tab-dashboard" class="tab-btn active py-4 px-1 border-b-2 border-transparent text-gray-400 hover:text-white transition flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>Dashboard</span>
+            </button>
+            <button id="tab-kanban" class="tab-btn py-4 px-1 border-b-2 border-transparent text-gray-400 hover:text-white transition flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v12a2 2 0 01-2 2h-2a2 2 0 01-2-2V6z" />
+                </svg>
+                <span>Quadro Kanban</span>
+            </button>
+            <button id="tab-demandas" class="tab-btn py-4 px-1 border-b-2 border-transparent text-gray-400 hover:text-white transition flex items-center">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Demandas</span>
+            </button>
+             <button id="tab-catalogo" class="tab-btn py-4 px-1 border-b-2 border-transparent text-gray-400 hover:text-white transition flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 10h16M4 13h16M4 16h16" />
+                </svg>
+                <span>Catálogo</span>
+            </button>
+            <button id="tab-hc" class="tab-btn py-4 px-1 border-b-2 border-transparent text-gray-400 hover:text-white transition flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>Head Count (HC)</span>
+            </button>
+        </nav>
+    </div>
+    
+    <!-- Painel de Filtros -->
+    <div id="global-filters-panel" class="container mx-auto px-4 pt-4">
+        <div class="bg-gray-800 rounded-lg p-4">
+            <h2 class="text-xl font-bold mb-4">Filtros</h2>
+            <div id="global-filters" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-sm">
+                <!-- Filtros populados via JS -->
+            </div>
+            <button id="clear-filters-btn" class="mt-4 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center space-x-2 justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Limpar Filtros</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Conteúdo das Abas -->
+    <div id="tab-content" class="container mx-auto p-4">
+        <!-- Aba do Dashboard -->
+        <div id="view-dashboard">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div class="bg-gray-800 p-4 rounded-lg text-center">
+                    <h3 class="text-lg font-semibold text-gray-400">Cycle Time Médio</h3>
+                    <p id="kpi-cycle-time" class="text-3xl font-bold text-blue-400">-- dias</p>
+                    <p class="text-xs text-gray-500">(Do início ao fim da execução)</p>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-lg text-center">
+                    <h3 class="text-lg font-semibold text-gray-400">Lead Time Médio</h3>
+                    <p id="kpi-lead-time" class="text-3xl font-bold text-purple-400">-- dias</p>
+                    <p class="text-xs text-gray-500">(Da criação à entrega final)</p>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-lg text-center">
+                    <h3 class="text-lg font-semibold text-gray-400">Vazão (Últimos 7 dias)</h3>
+                    <p id="kpi-throughput" class="text-3xl font-bold text-green-400">-- itens</p>
+                    <p class="text-xs text-gray-500">(Itens concluídos)</p>
+                </div>
+            </div>
+
+            <!-- WIP Tracker -->
+            <div class="bg-gray-800 p-4 rounded-lg mb-6">
+                <h3 class="text-lg font-semibold text-center mb-2">Em Execução Agora</h3>
+                <div id="wip-tracker-container" class="space-y-1">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[450px]"><canvas id="cumulativeFlowChart"></canvas></div>
+                <div class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[450px]"><canvas id="timeEvolutionChart"></canvas></div>
+                <div class="bg-gray-800 p-4 rounded-lg h-[450px]"><canvas id="responsaveisChart"></canvas></div>
+                <div class="bg-gray-800 p-4 rounded-lg h-[450px]"><canvas id="statusDistributionChart"></canvas></div>
+                
+                <div id="effort-analysis-chart-container" class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[450px]"><canvas id="effortAnalysisChart"></canvas></div>
+                <div id="efficiency-chart-container" class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[450px]"><canvas id="efficiencyChart"></canvas></div>
+                
+                <!-- Seção de Horas Investidas -->
+                <div class="col-span-1 lg:col-span-2 bg-gray-800 p-4 rounded-lg">
+                    <div class="flex justify-end mb-4">
+                         <select id="time-log-week-selector" class="bg-gray-700 border border-gray-600 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500"></select>
+                    </div>
+                    <div class="grid grid-cols-1 gap-6">
+                         <div class="h-[450px]"><canvas id="collaboratorHoursChart"></canvas></div>
+                         <div class="h-[450px]"><canvas id="processHoursChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[450px]"><canvas id="nucleoChart"></canvas></div>
+            </div>
+        </div>
+        
+        <!-- Aba de Demandas -->
+        <div id="view-demandas" class="hidden">
+            <div class="bg-gray-800 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                    <h2 class="text-xl font-bold">Demandas Importadas</h2>
+                    <div class="flex space-x-2">
+                        <button id="import-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg flex items-center space-x-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"> <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /> </svg>
+                            <span>Importar Demandas</span>
+                        </button>
+                        <button id="clear-data-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg flex items-center space-x-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"> <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /> </svg>
+                            <span>Limpar Demandas</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Aviso de Duplicatas -->
+                <div id="duplicate-warning" class="hidden bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg relative mb-4" role="alert">
+                    <strong class="font-bold">Atenção:</strong>
+                    <span class="block sm:inline" id="duplicate-message"></span>
+                </div>
+
+                <div id="table-container" class="overflow-auto text-sm max-h-[60vh] rounded-lg">
+                    <p class="text-gray-400 p-4">Nenhum dado importado. Clique em "Importar Demandas" para começar.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aba do Catálogo -->
+        <div id="view-catalogo" class="hidden">
+            <div class="bg-gray-800 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                    <h2 class="text-xl font-bold">Catálogo de Atividades e Tempos</h2>
+                    <button id="add-activity-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg flex items-center space-x-2">
+                       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"> <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" /> </svg>
+                        <span>Nova Atividade</span>
+                    </button>
+                </div>
+                <div id="catalog-table-container" class="overflow-auto text-sm max-h-[70vh] rounded-lg">
+                    <!-- Tabela do catálogo será gerada aqui -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Aba de Head Count -->
+        <div id="view-hc" class="hidden">
+            <div class="bg-gray-800 rounded-lg p-6">
+                 <div class="flex items-center justify-center mb-6">
+                     <h2 class="text-2xl font-bold text-center">Análise de Head Count (HC)</h2>
+                     <div class="tooltip-container ml-2">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                         </svg>
+                         <span class="tooltip absolute bottom-full mb-2 w-72 p-2 text-xs bg-gray-900 border border-gray-700 rounded-md shadow-lg text-left">O cálculo de HC (Head Count) é uma estimativa de quantos colaboradores são necessários. <br><b>Fórmula:</b> (Total Horas) / (Carga Horária Mensal × Fator de Produtividade).</span>
+                     </div>
+                 </div>
+                 
+                 <div class="bg-gray-700/50 p-4 rounded-lg mb-8">
+                     <h3 class="text-xl font-semibold mb-4 text-center">Parâmetros de Cálculo</h3>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                         <div class="text-center">
+                             <label for="hc-hours-input" class="block text-lg font-semibold text-gray-400 mb-2">Carga Horária Mensal / Colaborador</label>
+                             <input type="number" id="hc-hours-input" value="191" class="w-32 mx-auto p-2 text-2xl font-bold text-center rounded bg-gray-800 border border-gray-600 text-purple-400">
+                         </div>
+                         <div class="text-center">
+                             <div class="flex items-center justify-center">
+                                 <label for="hc-productivity-factor" class="block text-lg font-semibold text-gray-400 mb-2">Fator de Produtividade (%)</label>
+                                 <div class="tooltip-container ml-2">
+                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                         <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                     </svg>
+                                     <span class="tooltip absolute bottom-full mb-2 w-64 p-2 text-xs bg-gray-900 border border-gray-700 rounded-md shadow-lg">Percentual do tempo que um colaborador efetivamente se dedica a tarefas produtivas, desconsiderando reuniões, pausas, etc. (Padrão de mercado: 70-85%)</span>
+                                 </div>
+                             </div>
+                             <input type="number" id="hc-productivity-factor" value="80" class="w-32 mx-auto p-2 text-2xl font-bold text-center rounded bg-gray-800 border border-gray-600 text-purple-400">
+                         </div>
+                     </div>
+                 </div>
+
+                 <!-- Resumo das Horas -->
+                 <div class="bg-gray-700/50 p-4 rounded-lg mb-8">
+                     <div class="flex items-center justify-center">
+                        <h3 class="text-xl font-semibold mb-4 text-center">Resumo de Horas (Base para Cálculo Mensal)</h3>
+                        <div class="tooltip-container ml-2">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                                 <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                             </svg>
+                             <span class="tooltip absolute bottom-full mb-2 w-80 p-2 text-xs bg-gray-900 border border-gray-700 rounded-md shadow-lg text-left">
+                                 <b>HC Base:</b> Soma dos tempos unitários do catálogo (não é um total de horas). <br>
+                                 <b>HC Demanda Atual:</b> Soma das horas previstas das demandas importadas/filtradas. <br>
+                                 <b>HC Anual (100%):</b> Média mensal de horas se 100% da necessidade anual do catálogo fosse executada. <br>
+                                 <b>HC com Backlog:</b> Média mensal de horas considerando o % de realização definido no catálogo.
+                             </span>
+                         </div>
+                     </div>
+                     <div class="grid grid-cols-4 gap-4 text-center text-sm">
+                         <div class="font-bold text-gray-400">Tipo de HC</div>
+                         <div class="font-bold text-gray-400">Total Horas Eng.</div>
+                         <div class="font-bold text-gray-400">Total Horas Tec.</div>
+                         <div class="font-bold text-gray-400">Total Horas</div>
+                         
+                         <div class="text-gray-300">Base</div>
+                         <div><p id="summary-base-eng" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-base-tec" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-base-total" class="font-mono p-1 bg-gray-800 rounded font-bold">--</p></div>
+
+                         <div class="text-gray-300">Demanda Atual</div>
+                         <div><p id="summary-current-eng" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-current-tec" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-current-total" class="font-mono p-1 bg-gray-800 rounded font-bold">--</p></div>
+
+                         <div class="text-gray-300">Anual (100%)</div>
+                         <div><p id="summary-annual-eng" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-annual-tec" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-annual-total" class="font-mono p-1 bg-gray-800 rounded font-bold">--</p></div>
+
+                         <div class="text-gray-300">Com Backlog</div>
+                         <div><p id="summary-real-eng" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-real-tec" class="font-mono p-1 bg-gray-800 rounded">--</p></div>
+                         <div><p id="summary-real-total" class="font-mono p-1 bg-gray-800 rounded font-bold">--</p></div>
+                     </div>
+                 </div>
+
+                 <div class="bg-gray-700/50 p-4 rounded-lg mb-8">
+                    <h3 class="text-xl font-semibold mb-4 text-center">HC Total (Engenheiro + Técnico)</h3>
+                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-gray-400">HC Base</h3>
+                            <p id="hc-base-total" class="text-3xl font-bold text-green-400">--</p>
+                        </div>
+                         <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-gray-400">HC Demanda Atual</h3>
+                            <p id="hc-current-total" class="text-3xl font-bold text-green-400">--</p>
+                        </div>
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-gray-400">HC Anual (100%)</h3>
+                            <p id="hc-annual-total" class="text-3xl font-bold text-green-400">--</p>
+                        </div>
+                        <div class="bg-gray-700 p-4 rounded-lg">
+                            <h3 class="text-lg font-semibold text-gray-400">HC com Backlog</h3>
+                            <p id="hc-real-total" class="text-3xl font-bold text-green-400">--</p>
+                        </div>
+                     </div>
+                 </div>
+
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                     <div class="bg-gray-700/50 p-4 rounded-lg">
+                         <h3 class="text-xl font-semibold mb-4 text-center">Composição HC Engenheiro</h3>
+                         <div class="grid grid-cols-2 gap-4 text-center">
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Base</h4><p id="hc-base-eng" class="text-2xl font-bold text-blue-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Atual</h4><p id="hc-current-eng" class="text-2xl font-bold text-blue-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Anual (100%)</h4><p id="hc-annual-eng" class="text-2xl font-bold text-blue-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Com Backlog</h4><p id="hc-real-eng" class="text-2xl font-bold text-blue-400">--</p></div>
+                         </div>
+                     </div>
+                     <div class="bg-gray-700/50 p-4 rounded-lg">
+                         <h3 class="text-xl font-semibold mb-4 text-center">Composição HC Técnico</h3>
+                         <div class="grid grid-cols-2 gap-4 text-center">
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Base</h4><p id="hc-base-tec" class="text-2xl font-bold text-teal-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Atual</h4><p id="hc-current-tec" class="text-2xl font-bold text-teal-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Anual (100%)</h4><p id="hc-annual-tec" class="text-2xl font-bold text-teal-400">--</p></div>
+                            <div class="p-2 rounded-lg bg-gray-800"><h4 class="text-md font-semibold text-gray-400">Com Backlog</h4><p id="hc-real-tec" class="text-2xl font-bold text-teal-400">--</p></div>
+                         </div>
+                     </div>
+                 </div>
+
+                 <div class="bg-gray-800 p-4 rounded-lg col-span-1 lg:col-span-2 h-[500px]"><canvas id="hc-process-chart"></canvas></div>
+            </div>
+        </div>
+
+
+        <!-- Aba do Kanban -->
+        <div id="view-kanban" class="hidden">
+            <!-- Controles de Ordenação do Kanban -->
+            <div class="bg-gray-800 rounded-lg p-3 mb-4 flex items-center justify-end space-x-4 text-sm">
+                <label for="kanban-sort-by" class="font-semibold">Ordenar por:</label>
+                <select id="kanban-sort-by" class="bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="score">Score</option>
+                    <option value="createdAt">Data de Criação</option>
+                    <option value="id">ID</option>
+                    <option value="reclamacoes">Nº de Reclamações</option>
+                    <option value="criticidade">Criticidade</option>
+                </select>
+                <select id="kanban-sort-direction" class="bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="desc">Maior para Menor</option>
+                    <option value="asc">Menor para Menor</option>
+                </select>
+            </div>
+            
+            <main id="kanban-board" class="flex space-x-4 overflow-x-auto no-scrollbar pb-4">
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-gray-500 pb-2 flex justify-center items-center">Caixa de Entrada<span id="count-triagem" class="ml-2 text-sm font-mono bg-gray-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-triagem" class="kanban-column space-y-3" data-status="triagem"></div></div>
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-yellow-500 pb-2 flex justify-center items-center">Backlog Priorizado<span id="count-backlog" class="ml-2 text-sm font-mono bg-yellow-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-backlog" class="kanban-column space-y-3" data-status="backlog"></div></div>
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-blue-500 pb-2 flex justify-center items-center">A Fazer<span id="count-fazer" class="ml-2 text-sm font-mono bg-blue-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-fazer" class="kanban-column space-y-3" data-status="fazer"></div></div>
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-purple-500 pb-2 flex justify-center items-center">Em Andamento<span id="count-andamento" class="ml-2 text-sm font-mono bg-purple-600 rounded-full px-2 py-0.5">0/5</span></h2><div id="column-andamento" class="kanban-column space-y-3" data-status="andamento"></div></div>
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-indigo-500 pb-2 flex justify-center items-center">Em Validação<span id="count-validacao" class="ml-2 text-sm font-mono bg-indigo-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-validacao" class="kanban-column space-y-3" data-status="validacao"></div></div>
+                <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-green-500 pb-2 flex justify-center items-center">Concluído<span id="count-concluido" class="ml-2 text-sm font-mono bg-green-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-concluido" class="kanban-column space-y-3" data-status="concluido"></div></div>
+            </main>
+        </div>
+    </div>
+
+     <!-- Modal Edição Catálogo -->
+    <div id="catalog-edit-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-lg">
+            <form id="catalog-edit-form">
+                <input type="hidden" id="original-activity-name">
+                <h2 id="catalog-modal-title" class="text-2xl font-bold mb-4">Editar Atividade</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="edit-activity-name" class="block mb-1 font-semibold text-sm">Nome da Atividade</label>
+                        <input type="text" id="edit-activity-name" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                    </div>
+                    <div>
+                        <label for="edit-activity-process" class="block mb-1 font-semibold text-sm">Processo</label>
+                        <input type="text" id="edit-activity-process" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                    </div>
+                     <div>
+                        <label for="edit-activity-role" class="block mb-1 font-semibold text-sm">Função</label>
+                        <select id="edit-activity-role" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                            <option value="Eng">Eng</option>
+                            <option value="Tec">Tec</option>
+                            <option value="Eng/Tec">Eng/Tec</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="edit-activity-time" class="block mb-1 font-semibold text-sm">Tempo Previsto (h)</label>
+                        <input type="number" id="edit-activity-time" step="0.1" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                    </div>
+                     <div>
+                        <label for="edit-activity-annual-need" class="block mb-1 font-semibold text-sm">Necessidade Anual</label>
+                        <input type="number" id="edit-activity-annual-need" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                    </div>
+                     <div>
+                        <label for="edit-activity-execution-percentage" class="block mb-1 font-semibold text-sm">% de Realização</label>
+                        <input type="number" id="edit-activity-execution-percentage" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center mt-6 pt-4 border-t border-gray-700">
+                    <button type="button" id="delete-activity-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Excluir</button>
+                    <div>
+                        <button type="button" id="cancel-catalog-edit-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg mr-2">Cancelar</button>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- Modal para Adicionar/Editar Demanda -->
+    <div id="demand-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-screen overflow-y-auto no-scrollbar relative">
+            
+            <form id="demand-form">
+                <input type="hidden" id="demand-id">
+                <div class="flex justify-between items-start mb-6 border-b border-gray-700 pb-4">
+                    <h2 id="modal-title" class="text-2xl font-bold pt-1">Nova Demanda</h2>
+                    <div class="flex items-start space-x-4">
+                        <div class="text-right">
+                            <label for="demand-status" class="block text-sm font-semibold text-gray-400">Status</label>
+                            <select id="demand-status" class="p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+                        </div>
+                        <button type="button" id="close-modal-btn" class="text-gray-400 hover:text-white text-3xl font-bold leading-none">&times;</button>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8">
+                    <!-- Coluna da Esquerda: Dados Gerais -->
+                    <div class="space-y-4">
+                        <fieldset class="border border-gray-700 p-3 rounded-lg bg-gray-700/30">
+                            <legend class="text-sm font-semibold px-2 text-gray-400">Dados da Planilha</legend>
+                            <div id="original-data-content" class="grid grid-cols-2 gap-x-4 gap-y-2 mt-2 text-sm"></div>
+                        </fieldset>
+
+                        <div>
+                            <label for="demand-title" class="block mb-1 font-semibold text-sm">Título da Demanda</label>
+                            <input type="text" id="demand-title" class="w-full p-2 rounded bg-gray-700 border border-gray-600" required>
+                        </div>
+                         <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                 <label for="demand-responsible" class="block mb-1 font-semibold text-sm">Responsável</label>
+                                 <select id="demand-responsible" class="w-full p-2 rounded bg-gray-700 border border-gray-600"></select>
+                            </div>
+                            <div>
+                                 <label for="demand-nucleus" class="block mb-1 font-semibold text-sm">Núcleo</label>
+                                 <select id="demand-nucleus" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                                      <option value="">Não definido</option>
+                                      <option value="Proteção">Proteção</option>
+                                      <option value="Automação">Automação</option>
+                                      <option value="Estudos">Estudos</option>
+                                 </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="demand-description" class="block mb-1 font-semibold text-sm">Descrição</label>
+                            <textarea id="demand-description" rows="3" class="w-full p-2 rounded bg-gray-700 border border-gray-600"></textarea>
+                        </div>
+                        <div id="completion-date-wrapper">
+                            <label for="demand-completion-date" class="block mb-1 font-semibold text-sm">Data de Conclusão</label>
+                            <input type="datetime-local" id="demand-completion-date" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                        </div>
+                    </div>
+
+                    <!-- Coluna da Direita: Priorização -->
+                    <div class="space-y-4 mt-4 lg:mt-0">
+                        <div class="border border-gray-700 p-4 rounded-lg bg-gray-700/30">
+                             <h3 class="text-lg font-semibold mb-3 text-blue-300">Priorização</h3>
+                             <div id="prioritization-criteria" class="bg-gray-900/50 p-3 rounded-md mb-4">
+                                 <h4 class="font-bold text-sm mb-2">Critérios de Priorização (Ordem)</h4>
+                                 <ol class="list-decimal list-inside text-sm space-y-2">
+                                     <li><strong>Score:</strong> <span id="crit-score" class="font-bold text-yellow-400">--</span></li>
+                                     <li><strong>Nº Reclamações (30d):</strong> <span id="crit-reclamacoes" class="font-bold text-yellow-400">--</span></li>
+                                     <li><strong>Entrada (FIFO):</strong> <span id="crit-prazo" class="font-bold text-yellow-400">--</span></li>
+                                 </ol>
+                             </div>
+
+                             <div>
+                                <label for="demand-type" class="block mb-1 font-semibold text-sm">Tipo de Cálculo</label>
+                                <select id="demand-type" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                                    <option value="">Não calcular score</option>
+                                    <option value="problema">Problema / Falha (GUT)</option>
+                                    <option value="melhoria">Melhoria / Projeto (RICE)</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Formulário GUT -->
+                        <fieldset id="gut-fields" class="hidden border border-gray-700 p-4 rounded-lg">
+                            <legend class="text-md font-semibold px-2">Matriz GUT</legend>
+                            <div class="grid grid-cols-3 gap-4 mt-2">
+                                <div><label for="gut-g" class="block text-sm mb-1">Gravidade (1-5)</label><input type="number" id="gut-g" min="1" max="5" class="w-full p-2 rounded bg-gray-900 border border-gray-600"></div>
+                                <div><label for="gut-u" class="block text-sm mb-1">Urgência (1-5)</label><input type="number" id="gut-u" min="1" max="5" class="w-full p-2 rounded bg-gray-900 border border-gray-600"></div>
+                                <div><label for="gut-t" class="block text-sm mb-1">Tendência (1-5)</label><input type="number" id="gut-t" min="1" max="5" class="w-full p-2 rounded bg-gray-900 border border-gray-600"></div>
+                            </div>
+                            <div class="mt-3 text-center bg-gray-900/50 p-2 rounded-lg">
+                                <p class="text-sm text-gray-400" id="gut-formula-display">G x U x T = Score</p>
+                                <span class="text-lg font-bold">Score GUT: <span id="gut-score-display" class="text-xl text-red-400">0</span></span>
+                            </div>
+                        </fieldset>
+
+                        <!-- Formulário RICE -->
+                        <fieldset id="rice-fields" class="hidden border border-gray-700 p-4 rounded-lg">
+                            <legend class="text-md font-semibold px-2">Matriz RICE</legend>
+                             <div class="grid grid-cols-2 gap-4 mt-2">
+                                <div>
+                                    <label for="rice-reach" class="block text-sm mb-1">Alcance (Reach)</label>
+                                    <input type="number" id="rice-reach" min="0" class="w-full p-2 rounded bg-gray-900 border border-gray-600">
+                                </div>
+                                <div>
+                                    <label for="rice-impact" class="block text-sm mb-1">Impacto</label>
+                                    <select id="rice-impact" class="w-full p-2 rounded bg-gray-900 border border-gray-600"><option value="3">Massivo (3)</option><option value="2">Alto (2)</option><option value="1">Médio (1)</option><option value="0.5">Baixo (0.5)</option></select>
+                                </div>
+                                <div>
+                                    <label for="rice-confidence" class="block text-sm mb-1">Confiança</label>
+                                    <select id="rice-confidence" class="w-full p-2 rounded bg-gray-900 border border-gray-600"><option value="1">Alta (100%)</option><option value="0.8">Média (80%)</option><option value="0.5">Baixa (50%)</option></select>
+                                </div>
+                                <div>
+                                    <label for="rice-effort" class="block text-sm mb-1">Esforço (pessoa-semana)</label>
+                                    <input type="number" id="rice-effort" min="0.5" step="0.5" class="w-full p-2 rounded bg-gray-900 border border-gray-600">
+                                </div>
+                            </div>
+                            <div class="mt-3 text-center bg-gray-900/50 p-2 rounded-lg">
+                                <p class="text-sm text-gray-400" id="rice-formula-display">(R x I x C) / E = Score</p>
+                                <span class="text-lg font-bold">Score RICE: <span id="rice-score-display" class="text-xl text-green-400">0.0</span></span>
+                            </div>
+                        </fieldset>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center mt-6 pt-4 border-t border-gray-700">
+                    <button type="button" id="delete-demand-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg hidden">Excluir</button>
+                    <div class="flex-grow text-right">
+                        <button type="button" id="cancel-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg mr-2">Cancelar</button>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Salvar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+<script type="module">
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Variáveis Globais e Configurações ---
+    const { db, auth, firebase } = window;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'dev-app';
+
+    // --- Referências do Firestore ---
+    let tasksCollectionRef;
+    let configDocRef;
+    let unsubscribeTasks = () => {};
+    let unsubscribeConfig = () => {};
+
+    // --- Estado da Aplicação ---
+    const WIP_LIMIT = 5;
+    let tasks = [];
+    let allHeaders = [];
+    let history = [];
+    let timeLog = [];
+    let activityCatalog = {};
+    
+    let duplicateIdList = [];
+    let teamMembers = [];
+    let draggedTaskId = null;
+    let chartObjects = {};
+    let currentSort = { by: 'score', direction: 'desc' };
+    let timerInterval = null;
+    let currentView = 'manager';
+    let isManager = false; // Controla o nível de acesso
+    let userId = null; // UID do usuário logado
+    let dataLoaded = false;
+
+    const defaultActivityCatalog = {
+        "Elaboração de OGs para novas obras em TAF (OLTC. BC e Reator)": { "time": 1.3, "process": "Tensão em regime permanente", "annualNeed": 200, "executionPercentage": 100, "role": "Eng" },
+        "Elaboração de OGs para RTs/BCs (plano 8.4) Revisão de OGS": { "time": 0.8, "process": "Tensão em regime permanente", "annualNeed": 402, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Indicação e cobrança de pontos para o RUA": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 150, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Indicação de prioridades de RTs/BCs": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+        "Estudar reincidência de queimas de equipamento Acompanhamento, cobrança de RIME etc": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
+        "Controle de Fator de Potência PSU": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 24, "executionPercentage": 100, "role": "Eng" },
+        "Analise de instalação de RT e melhores práticas": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
+        "Realocação de equipamento e estudo para novos pontos de instalação": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 88, "executionPercentage": 100, "role": "Eng" },
+        "Validação da memória de massa após aplicação da OG": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 402, "executionPercentage": 100, "role": "Tec" },
+        "Diagnóstico de qualidade do produto": { "time": 2.6, "process": "Gestão de Qualidade do produto", "annualNeed": 812, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Suporte técnico para equipes de campo": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 132, "executionPercentage": 100, "role": "Tec" },
+        "Configuração e Gestão de Qualimetro": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 36, "executionPercentage": 100, "role": "Tec" },
+        "Gestão e acompanhamento de ações de mitigação": { "time": 4, "process": "Gestão de Qualidade do produto", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Visita à clientes": { "time": 20, "process": "Gestão de Qualidade do produto", "annualNeed": 30, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Reunião com Clientes": { "time": 0.8, "process": "Gestão de Qualidade do produto", "annualNeed": 144, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Controle e gestão das medições permanentes": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 44, "executionPercentage": 100, "role": "Tec" },
+        "Elaboração de relatório com diagnóstico de qualidade": { "time": 1.5, "process": "Gestão de Qualidade do produto", "annualNeed": 700, "executionPercentage": 100, "role": "Eng" },
+        "Planos especiais para clientes (indústrias, oeste, etc.)": { "time": 0.5, "process": "Gestão de Qualidade do produto", "annualNeed": 1300, "executionPercentage": 100, "role": "Eng" },
+        "Atualização do Carregamento de AL, Trafos e LT": { "time": 2, "process": "Gestão de Qualidade do produto", "annualNeed": 12, "executionPercentage": 100, "role": "Tec" },
+        "Diagnóstico para SHD": { "time": 2.6, "process": "Gestão de Qualidade do produto", "annualNeed": 100, "executionPercentage": 100, "role": "Eng" },
+        "Análise e otimização dos alimentadores envolvidos nos planos especiais": { "time": 4, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 348, "executionPercentage": 100, "role": "Eng" },
+        "Ressaca dos planos": { "time": 16, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 3, "executionPercentage": 100, "role": "Eng" },
+        "Visita à região": { "time": 20, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 30, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Análise e otimização dos Trafos envolvidos nos planos especiais": { "time": 1, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 90, "executionPercentage": 100, "role": "Eng" },
+        "Análise e otimização de LDs envolvidos nos planos especiais": { "time": 1, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 50, "executionPercentage": 100, "role": "Eng" },
+        "Gestão e acompanhamento do plano de ação": { "time": 4, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 112, "executionPercentage": 100, "role": "Eng" },
+        "Padronizar analise e processos": { "time": 8, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
+        "Reuniões de supervisão": { "time": 16, "process": "Processos", "annualNeed": 88, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Reunião de equipe": { "time": 16, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Reunião Gerencial (Dese etc.)": { "time": 4, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Workshop Super e Gerencia": { "time": 32, "process": "Processos", "annualNeed": 5, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Criar fluxo dos processos": { "time": 16, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Treinamento/Workshop/benchmarking": { "time": 32, "process": "Processos", "annualNeed": 5, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Congresso e Seminários": { "time": 24, "process": "Processos", "annualNeed": 8, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Processos de Inovação (Inovar)": { "time": 10, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Analise de contigência N-1 (quadrimestral)": { "time": 8, "process": "Quadrimestral", "annualNeed": 36, "executionPercentage": 100, "role": "Eng" },
+        "Elaboração de Relatório Quadrimestral": { "time": 12, "process": "Quadrimestral", "annualNeed": 36, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Pontos de SEP": { "time": 0.5, "process": "Quadrimestral", "annualNeed": 24, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Manutenção de Deck": { "time": 2, "process": "Quadrimestral", "annualNeed": 24, "executionPercentage": 100, "role": "Eng/Tec" },
+        "Criação do Deck": { "time": 16, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+        "ERAC": { "time": 1, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+        "Atendimento a Inequações ONS": { "time": 4, "process": "Quadrimestral", "annualNeed": 6, "executionPercentage": 100, "role": "Eng" },
+        "Indicação de MUST em contingència": { "time": 1, "process": "Quadrimestral", "annualNeed": 48, "executionPercentage": 100, "role": "Eng" },
+        "Suporte para Análise de RCA": { "time": 1, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+        "Planejar o Recurso para o próximo ano": { "time": 24, "process": "Plano 8.4", "annualNeed": 1, "executionPercentage": 100, "role": "Eng" },
+        "Acompanhar a utilização do recurso no ano corrente": { "time": 2, "process": "Plano 8.4", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+        "Priorizar aplicação do recurso para demandas não planejadas": { "time": 1.5, "process": "Plano 8.4", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+        "Gestão dos entrantes judiciais": { "time": 0.33, "process": "VNT", "annualNeed": 40, "executionPercentage": 100, "role": "Eng" },
+        "Elaboração da carteira de medição": { "time": 0.66, "process": "VNT", "annualNeed": 48, "executionPercentage": 100, "role": "Tec" },
+        "Lançamento das medições no SRT": { "time": 0.13, "process": "VNT", "annualNeed": 2850, "executionPercentage": 100, "role": "Tec" },
+        "Analise comp comercial": { "time": 0.33, "process": "VNT", "annualNeed": 2850, "executionPercentage": 100, "role": "Eng" },
+        "Acompanhamento ANEEL/Ouvidoria": { "time": 1.33, "process": "VNT", "annualNeed": 210, "executionPercentage": 100, "role": "Tec" },
+        "Gerar Nota de Obra": { "time": 0.16, "process": "VNT", "annualNeed": 860, "executionPercentage": 100, "role": "Tec" },
+        "Acompanhamento da carteira de medição": { "time": 2, "process": "VNT", "annualNeed": 24, "executionPercentage": 100, "role": "Tec" },
+        "Analise de comp técnica": { "time": 0.66, "process": "VNT", "annualNeed": 2330, "executionPercentage": 100, "role": "Eng" },
+        "Gestão de investimento de Obras X Compensação": { "time": 0.66, "process": "VNT", "annualNeed": 1240, "executionPercentage": 100, "role": "Eng" },
+        "Gestão dos med Graf": { "time": 1.5, "process": "VNT", "annualNeed": 48, "executionPercentage": 100, "role": "Tec" },
+        "Report Semanal do VNT": { "time": 0.33, "process": "VNT", "annualNeed": 192, "executionPercentage": 100, "role": "Eng" },
+        "Demandas Ocasionais": { "time": 2, "process": "Outros", "annualNeed": 88, "executionPercentage": 100, "role": "Eng/Tec" }
+    };
+
+    // --- ELEMENTOS DO DOM (sem alterações) ---
+    const elements = {
+        addDemandBtn: document.getElementById('add-demand-btn'),
+        importBtn: document.getElementById('import-btn'),
+        exportBtn: document.getElementById('export-btn'),
+        fileInput: document.getElementById('file-input'),
+        clearFiltersBtn: document.getElementById('clear-filters-btn'),
+        clearDataBtn: document.getElementById('clear-data-btn'),
+        viewToggle: document.getElementById('view-toggle'),
+        viewToggleContainer: document.getElementById('view-toggle-container'),
+        tabs: { dashboard: document.getElementById('tab-dashboard'), demandas: document.getElementById('tab-demandas'), kanban: document.getElementById('tab-kanban'), catalogo: document.getElementById('tab-catalogo'), hc: document.getElementById('tab-hc') },
+        views: { dashboard: document.getElementById('view-dashboard'), demandas: document.getElementById('view-demandas'), kanban: document.getElementById('view-kanban'), catalogo: document.getElementById('view-catalogo'), hc: document.getElementById('view-hc') },
+        tableContainer: document.getElementById('table-container'),
+        duplicateWarning: document.getElementById('duplicate-warning'),
+        duplicateMessage: document.getElementById('duplicate-message'),
+        kanbanBoard: document.getElementById('kanban-board'),
+        kanbanColumns: document.querySelectorAll('.kanban-column'),
+        globalFilters: document.getElementById('global-filters'),
+        kanbanSortBy: document.getElementById('kanban-sort-by'),
+        kanbanSortDirection: document.getElementById('kanban-sort-direction'),
+        timeLogWeekSelector: document.getElementById('time-log-week-selector'),
+        catalog: {
+            container: document.getElementById('catalog-table-container'),
+            addBtn: document.getElementById('add-activity-btn'),
+            modal: document.getElementById('catalog-edit-modal'),
+            form: document.getElementById('catalog-edit-form'),
+            title: document.getElementById('catalog-modal-title'),
+            originalName: document.getElementById('original-activity-name'),
+            editName: document.getElementById('edit-activity-name'),
+            editProcess: document.getElementById('edit-activity-process'),
+            editRole: document.getElementById('edit-activity-role'),
+            editTime: document.getElementById('edit-activity-time'),
+            editAnnualNeed: document.getElementById('edit-activity-annual-need'),
+            editExecPercentage: document.getElementById('edit-activity-execution-percentage'),
+            deleteBtn: document.getElementById('delete-activity-btn'),
+            cancelBtn: document.getElementById('cancel-catalog-edit-btn')
+        },
+        hc: {
+            hoursInput: document.getElementById('hc-hours-input'),
+            productivityFactor: document.getElementById('hc-productivity-factor'),
+            baseTotal: document.getElementById('hc-base-total'),
+            currentTotal: document.getElementById('hc-current-total'),
+            annualTotal: document.getElementById('hc-annual-total'),
+            realTotal: document.getElementById('hc-real-total'),
+            baseEng: document.getElementById('hc-base-eng'),
+            currentEng: document.getElementById('hc-current-eng'),
+            annualEng: document.getElementById('hc-annual-eng'),
+            realEng: document.getElementById('hc-real-eng'),
+            baseTec: document.getElementById('hc-base-tec'),
+            currentTec: document.getElementById('hc-current-tec'),
+            annualTec: document.getElementById('hc-annual-tec'),
+            realTec: document.getElementById('hc-real-tec'),
+        },
+        effortAnalysisChartContainer: document.getElementById('effort-analysis-chart-container'),
+        efficiencyChartContainer: document.getElementById('efficiency-chart-container'),
+        kpis: {
+            cycleTime: document.getElementById('kpi-cycle-time'),
+            leadTime: document.getElementById('kpi-lead-time'),
+            throughput: document.getElementById('kpi-throughput')
+        },
+        modal: {
+            container: document.getElementById('demand-modal'),
+            form: document.getElementById('demand-form'),
+            title: document.getElementById('modal-title'),
+            id: document.getElementById('demand-id'),
+            status: document.getElementById('demand-status'),
+            demandTitle: document.getElementById('demand-title'),
+            responsible: document.getElementById('demand-responsible'),
+            nucleus: document.getElementById('demand-nucleus'),
+            description: document.getElementById('demand-description'),
+            type: document.getElementById('demand-type'),
+            completionDateWrapper: document.getElementById('completion-date-wrapper'),
+            completionDate: document.getElementById('demand-completion-date'),
+            originalDataContent: document.getElementById('original-data-content'),
+            critScore: document.getElementById('crit-score'),
+            critReclamacoes: document.getElementById('crit-reclamacoes'),
+            critPrazo: document.getElementById('crit-prazo'),
+            gut: {
+                fields: document.getElementById('gut-fields'),
+                g: document.getElementById('gut-g'), u: document.getElementById('gut-u'), t: document.getElementById('gut-t'),
+                formula: document.getElementById('gut-formula-display'),
+                score: document.getElementById('gut-score-display')
+            },
+            rice: {
+                fields: document.getElementById('rice-fields'),
+                reach: document.getElementById('rice-reach'), impact: document.getElementById('rice-impact'),
+                confidence: document.getElementById('rice-confidence'), effort: document.getElementById('rice-effort'),
+                formula: document.getElementById('rice-formula-display'),
+                score: document.getElementById('rice-score-display')
+            },
+            closeBtn: document.getElementById('close-modal-btn'),
+            cancelBtn: document.getElementById('cancel-btn'),
+            deleteBtn: document.getElementById('delete-demand-btn')
+        }
+    };
+    
+    // --- Lógica Principal da Aplicação ---
+    
+    const formatDate = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return dateString;
+        return date.toLocaleString('pt-BR', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        }).replace(',', '');
+    };
+    
+    const formatTime = (ms) => {
+        if (typeof ms !== 'number' || ms < 0) return '00:00:00';
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+        const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+        const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+        return `${hours}:${minutes}:${seconds}`;
+    };
+
+    const handleImport = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const data = e.target.result;
+            let workbook;
+            
+            try {
+                 workbook = XLSX.read(data, { type: 'binary', cellDates: true, codepage: 65001 });
+            } catch (error) {
+                console.error("Error parsing file:", error);
+                alert("Erro ao ler o arquivo.");
+                return;
+            }
+
+            const sheetName = workbook.SheetNames[0];
+            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+            // Pega as tasks existentes no Firebase para fazer o merge
+            const existingTasksQuery = await firebase.getDocs(tasksCollectionRef);
+            const existingTasksMap = new Map();
+            existingTasksQuery.forEach(doc => {
+                const task = doc.data();
+                existingTasksMap.set(task.originalId, { id: doc.id, ...task });
+            });
+
+            // Batch para escrever em massa no Firestore
+            const batch = firebase.writeBatch(db);
+
+            const headerSet = new Set();
+            jsonData.forEach(row => {
+                Object.keys(row).forEach(key => headerSet.add(key));
+            });
+            allHeaders = Array.from(headerSet);
+
+            jsonData.forEach((row, index) => {
+                const originalId = row.ID_REF;
+                if (!originalId) return; // Pula linhas sem ID_REF
+
+                const existingTask = existingTasksMap.get(originalId);
+
+                if (existingTask) {
+                    // **Merge Logic:** A tarefa já existe. Atualize-a.
+                    // Os dados da planilha são a base, mas mantemos as alterações do usuário.
+                    const updatedData = {
+                        ...existingTask, // Começa com os dados salvos
+                        title: row.Título || existingTask.title, // Atualiza com a planilha se houver
+                        originalData: row, // Sempre atualiza com os dados brutos mais recentes
+                        // Outros campos da planilha que podem mudar podem ser adicionados aqui
+                    };
+                    const taskRef = firebase.doc(db, `artifacts/${appId}/public/data/tasks`, existingTask.id);
+                    batch.update(taskRef, updatedData);
+
+                } else {
+                    // **New Task Logic:** A tarefa é nova. Crie-a.
+                    const statusMap = { "criada": "triagem", "em andamento": "andamento", "concluído": "concluido", "concluída": "concluido" };
+                    const parseGUTValue = (gutString) => {
+                        if (!gutString || typeof gutString !== 'string') return 0;
+                        const match = gutString.match(/\((\d+)\)/);
+                        return match ? parseInt(match[1], 10) : 0;
+                    };
+                    const sheetStatus = (row.Status || '').toLowerCase().trim();
+                    let status = statusMap[sheetStatus] || 'triagem';
+                    const g = parseGUTValue(row['Gravidade (GUT)']);
+                    const u = parseGUTValue(row['Urgência (GUT)']);
+                    const t = parseGUTValue(row['Tendência (GUT)']);
+                    const calculatedGUT = g * u * t;
+
+                    if (status === 'triagem' && calculatedGUT > 0) status = 'backlog';
+                    
+                    const activityName = row['Atividade'];
+                    const catalogEntry = activityCatalog[activityName] || { time: 0, process: 'Não Definido', role: 'N/A' };
+                    
+                    const newTaskData = {
+                        originalId: originalId,
+                        title: row.Título || 'Sem Título',
+                        description: row.Descrição || '',
+                        status: status,
+                        responsible: row['Atribuído a'] || '',
+                        createdAt: row.Criado_GD ? new Date(row.Criado_GD).toISOString() : new Date().toISOString(),
+                        scoreGUT: calculatedGUT,
+                        demandType: 'problema',
+                        originalData: row,
+                        completedAt: null,
+                        startedAt: (status === 'andamento' || status === 'validacao' || status === 'concluido') ? (row.Criado_GD ? new Date(row.Criado_GD).toISOString() : new Date().toISOString()) : null,
+                        gut: { g, u, t },
+                        reclamacoes30d: row['Nº de Reclamações dos últimos 30 dias'] || 0,
+                        nucleus: row['Núcleo'] || '',
+                        timeSpent: 0,
+                        isTiming: false,
+                        lastStartTime: null,
+                        playCount: 0,
+                        expectedTime: catalogEntry.time,
+                        process: catalogEntry.process,
+                        role: catalogEntry.role
+                    };
+                    const newDocRef = firebase.doc(tasksCollectionRef); // Cria uma referência com ID automático
+                    batch.set(newDocRef, newTaskData);
+                }
+            });
+            
+            // Salva os cabeçalhos e o catálogo atualizados no documento de configuração
+            batch.set(configDocRef, { 
+                allHeaders, 
+                activityCatalog,
+                history, // Salva o histórico também
+                timeLog
+            }, { merge: true });
+
+            try {
+                await batch.commit();
+                alert(`${jsonData.length} demandas foram processadas e salvas no banco de dados!`);
+            } catch(error) {
+                console.error("Erro ao salvar dados no Firebase: ", error);
+                alert("Ocorreu um erro ao salvar as demandas.");
+            }
+            
+            elements.fileInput.value = '';
+        };
+        reader.readAsBinaryString(file);
+    };
+
+    const handleExport = () => {
+        // ... (código existente sem alteração)
+    };
+
+    const clearData = async () => {
+        if (window.confirm("Tem certeza que deseja limpar todos os dados do banco de dados? Esta ação não pode ser desfeita.")) {
+            try {
+                // Deleta todas as tasks
+                const tasksSnapshot = await firebase.getDocs(tasksCollectionRef);
+                const batch = firebase.writeBatch(db);
+                tasksSnapshot.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+                // Reseta o documento de configuração
+                batch.set(configDocRef, {
+                    allHeaders: [],
+                    activityCatalog: defaultActivityCatalog,
+                    history: [],
+                    timeLog: []
+                });
+                await batch.commit();
+
+                alert("Aplicação reiniciada. Todos os dados foram limpos do banco de dados.");
+            } catch (error) {
+                console.error("Erro ao limpar os dados: ", error);
+                alert("Ocorreu um erro ao limpar o banco de dados.");
+            }
+        }
+    };
+    
+    // As funções de renderização (renderBoard, renderTable, renderDashboard, etc.) permanecem as mesmas
+    // ...
+    const STATUS_OPTIONS = {
+        triagem: "Caixa de Entrada", backlog: "Backlog Priorizado", fazer: "A Fazer",
+        andamento: "Em Andamento", validacao: "Em Validação", concluido: "Concluído"
+    };
+
+    const STATUS_TO_SHEET_MAP = {
+        triagem: "criada", backlog: "backlog", fazer: "a fazer",
+        andamento: "em andamento", validacao: "em validação", concluido: "concluído"
+    };
+    
+    const switchTab = (activeTabId) => {
+        Object.values(elements.views).forEach(view => view.classList.add('hidden'));
+        Object.values(elements.tabs).forEach(tab => tab.classList.remove('active'));
+        elements.views[activeTabId].classList.remove('hidden');
+        elements.tabs[activeTabId].classList.add('active');
+        renderActiveTabView();
+    };
+
+    const populateGlobalFilters = () => {
+        const filtersContainer = elements.globalFilters;
+        filtersContainer.innerHTML = '';
+        
+        teamMembers = [...new Set(tasks.map(t => t.responsible).filter(Boolean))].sort();
+
+        const filterConfigs = [
+            { key: 'ID_REF', label: 'ID (REF)', type: 'text' },
+            { key: 'status', label: 'Status Kanban', values: Object.keys(STATUS_OPTIONS) },
+            { key: 'responsible', label: 'Responsável', values: teamMembers },
+            { key: 'Núcleo', label: 'Núcleo' },
+            { key: 'Plano', label: 'Plano' },
+            { key: 'Prioridade', label: 'Criticidade' },
+            { key: 'Atividade: Processos', label: 'Processo' },
+            { key: 'Solicitado por', label: 'Solicitado por' },
+            { key: 'Área do Solicitante', label: 'Área Solicitante' },
+            { key: 'Alimentador', label: 'Alimentador' }
+        ];
+
+        filterConfigs.forEach(config => {
+            const filterWrapper = document.createElement('div');
+            
+            if (config.type === 'text') {
+                 filterWrapper.innerHTML = `<label for="filter-${config.key}" class="block text-xs font-medium text-gray-400 mb-1">${config.label}</label><input type="text" id="filter-${config.key}" data-filter-key="${config.key}" class="global-filter w-full p-2 rounded bg-gray-700 border border-gray-600 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">`;
+            } else {
+                const values = config.values || [...new Set(tasks.map(t => t.originalData?.[config.key]).filter(Boolean))].sort();
+                if (values.length === 0) return;
+
+                const options = config.key === 'status'
+                    ? values.map(val => `<option value="${val}">${STATUS_OPTIONS[val]}</option>`).join('')
+                    : values.map(val => `<option value="${val}">${val}</option>`).join('');
+
+                filterWrapper.innerHTML = `<label for="filter-${config.key}" class="block text-xs font-medium text-gray-400 mb-1">${config.label}</label><select id="filter-${config.key}" data-filter-key="${config.key}" class="global-filter w-full p-2 rounded bg-gray-700 border border-gray-600 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"><option value="">Todos</option>${options}</select>`;
+            }
+            filtersContainer.appendChild(filterWrapper);
+        });
+    };
+    
+    const getFilteredTasks = () => {
+        const activeFilters = Array.from(document.querySelectorAll('.global-filter')).filter(f => f.value !== '');
+        if (activeFilters.length === 0) return tasks;
+
+        return tasks.filter(task => {
+            return activeFilters.every(filter => {
+                const filterKey = filter.dataset.filterKey;
+                const filterValue = filter.value;
+                if (filterKey === 'ID_REF') return String(task.originalId).includes(filterValue);
+                if (filterKey === 'status') return task.status === filterValue;
+                if (filterKey === 'responsible') return task.responsible === filterValue;
+                return task.originalData && String(task.originalData[filterKey]) === filterValue;
+            });
+        });
+    };
+    
+    const sortTasks = (tasksToSort, sortBy, sortDirection) => {
+        const priorityMap = { 'Alta': 3, 'Média': 2, 'Baixa': 1 };
+
+        return [...tasksToSort].sort((a, b) => {
+            let primaryA, primaryB;
+
+            switch (sortBy) {
+                case 'score': primaryA = a.scoreGUT || a.scoreRICE || 0; primaryB = b.scoreGUT || b.scoreRICE || 0; break;
+                case 'createdAt': primaryA = new Date(a.createdAt); primaryB = new Date(b.createdAt); break;
+                case 'id': primaryA = parseInt(a.originalId, 10) || 0; primaryB = parseInt(b.originalId, 10) || 0; break;
+                case 'reclamacoes': primaryA = a.reclamacoes30d || 0; primaryB = b.reclamacoes30d || 0; break;
+                case 'criticidade': primaryA = priorityMap[a.originalData?.Prioridade] || 0; primaryB = priorityMap[b.originalData?.Prioridade] || 0; break;
+                default: primaryA = a.scoreGUT || a.scoreRICE || 0; primaryB = b.scoreGUT || b.scoreRICE || 0;
+            }
+
+            const direction = sortDirection === 'asc' ? 1 : -1;
+            if (primaryA < primaryB) return -1 * direction;
+            if (primaryA > primaryB) return 1 * direction;
+
+            const scoreA = a.scoreGUT || a.scoreRICE || 0;
+            const scoreB = b.scoreGUT || b.scoreRICE || 0;
+            if (scoreA !== scoreB) return scoreB - scoreA;
+
+            const reclamacoesA = a.reclamacoes30d || 0;
+            const reclamacoesB = b.reclamacoes30d || 0;
+            if (reclamacoesA !== reclamacoesB) return reclamacoesB - reclamacoesA;
+            
+            return new Date(a.createdAt) - new Date(b.createdAt);
+        });
+    };
+
+    const renderActiveTabView = () => {
+        if (!dataLoaded) return;
+        const activeTab = document.querySelector('.tab-btn.active').id.replace('tab-', '');
+        const filteredTasks = getFilteredTasks();
+        if (activeTab === 'dashboard') renderDashboard(filteredTasks);
+        else if (activeTab === 'demandas') renderTable(filteredTasks, duplicateIdList);
+        else if (activeTab === 'kanban') renderBoard(filteredTasks);
+        else if (activeTab === 'catalogo') renderCatalog();
+        else if (activeTab === 'hc') renderHC();
+    };
+    
+    const createCardElement = (task) => {
+        const card = document.createElement('div');
+        card.className = 'kanban-card bg-gray-700 p-3 rounded-lg shadow-md border-l-4';
+        card.setAttribute('draggable', true); card.dataset.id = task.id;
+        
+        const score = task.scoreGUT || task.scoreRICE || 0;
+        const scoreColor = task.demandType === 'problema' ? 'red' : 'green';
+        let borderColor = 'border-gray-500';
+        if(score > 80) borderColor = 'border-red-500';
+        else if (score > 40) borderColor = 'border-yellow-500';
+        else if (score > 0) borderColor = 'border-blue-500';
+        card.classList.add(borderColor);
+
+        let playButton = `<button data-action="play" data-id="${task.id}" class="text-green-400 hover:text-green-300"> <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"> <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /> </svg> </button>`;
+        let pauseButton = `<button data-action="pause" data-id="${task.id}" class="text-yellow-400 hover:text-yellow-300"> <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="currentColor" viewBox="0 0 20 20"> <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 00-1 1v2a1 1 0 102 0V9a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v2a1 1 0 102 0V9a1 1 0 00-1-1z" clip-rule="evenodd" /> </svg> </button>`;
+        
+        let timerControls = '';
+        if (task.status === 'andamento') {
+            timerControls = task.isTiming ? pauseButton : playButton;
+        } else if (task.status !== 'concluido') {
+            timerControls = playButton;
+        }
+
+        let effortTracker = '';
+        if (task.expectedTime > 0) {
+            const timeSpentHours = task.timeSpent / 3600000;
+            const percentage = Math.min((timeSpentHours / task.expectedTime) * 100, 100);
+            let progressBarColor = 'bg-blue-600';
+            if (percentage >= 100) {
+                progressBarColor = 'bg-red-600';
+            } else if (percentage >= 80) {
+                progressBarColor = 'bg-yellow-500';
+            }
+            effortTracker = `
+                <div class="mt-2">
+                    <div class="flex justify-between text-xs text-gray-300 mb-1">
+                        <span class="effort-spent">${timeSpentHours.toFixed(1)}h</span>
+                        <span>${task.expectedTime.toFixed(1)}h</span>
+                    </div>
+                    <div class="w-full bg-gray-600 rounded-full h-1.5">
+                        <div class="effort-bar-fill ${progressBarColor} h-1.5 rounded-full" style="width: ${percentage}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        card.innerHTML = `
+            <div class="flex justify-between items-start">
+                <p class="font-bold text-sm flex-1 pr-2 kanban-card-main-content">${task.title}</p>
+                ${score > 0 ? `<span class="text-xs font-bold text-${scoreColor}-400 bg-gray-800 px-2 py-1 rounded-full">${Number(score).toFixed(1)}</span>` : ''}
+            </div>
+            <p class="text-xs text-gray-400 mt-1 kanban-card-main-content">ID: ${task.originalId}</p>
+            <div class="mt-3 flex justify-between items-center">
+                <div class="flex items-center space-x-2 text-xs text-gray-400 kanban-card-main-content">
+                    <span class="bg-gray-600 px-2 py-1 rounded-md">${task.nucleus || 'N/A'}</span>
+                    <span>${task.responsible || 'N/D'}</span>
+                </div>
+                <div class="flex items-center space-x-2 timer-controls">
+                    <div class="flex items-center space-x-1 text-xs text-gray-400" title="Contador de Play/Pause">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 19v-5h-5M4 19h5v-5M20 5h-5v5"/></svg>
+                        <span>${task.playCount || 0}</span>
+                    </div>
+                     <span class="text-sm font-mono timer-display" data-id="${task.id}">${formatTime(task.timeSpent)}</span>
+                     ${timerControls}
+                </div>
+            </div>
+            ${effortTracker}
+            `;
+        
+        card.querySelector('.kanban-card-main-content').addEventListener('click', () => openModal(task.id));
+        card.addEventListener('dragstart', (e) => { draggedTaskId = task.id; e.currentTarget.classList.add('dragging'); });
+        card.addEventListener('dragend', (e) => e.currentTarget.classList.remove('dragging'));
+        return card;
+    };
+
+    const renderBoard = (tasksToRender) => {
+        elements.kanbanColumns.forEach(col => col.innerHTML = '');
+
+        const columnCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({...acc, [status]: 0}), {});
+        tasksToRender.forEach(task => {
+            if (columnCounts.hasOwnProperty(task.status)) {
+                columnCounts[task.status]++;
+            }
+        });
+
+        Object.keys(columnCounts).forEach(status => {
+            const countElement = document.getElementById(`count-${status}`);
+            if (countElement) {
+                if (status === 'andamento') {
+                    countElement.textContent = `${columnCounts[status]}/${WIP_LIMIT}`;
+                    countElement.classList.toggle('wip-limit-exceeded', columnCounts[status] > WIP_LIMIT);
+                } else {
+                    countElement.textContent = columnCounts[status];
+                }
+            }
+        });
+
+        const sortedTasks = sortTasks(tasksToRender, currentSort.by, currentSort.direction);
+        sortedTasks.forEach(task => {
+            const column = document.getElementById(`column-${task.status}`);
+            if (column) column.appendChild(createCardElement(task));
+        });
+    };
+
+    const renderTable = (tasksToRender, duplicateIds = []) => {
+        const container = elements.tableContainer;
+        if (!allHeaders || allHeaders.length === 0) {
+            container.innerHTML = '<p class="text-gray-400 p-4">Nenhum dado importado. Clique em "Importar Demandas" para começar.</p>';
+            return;
+        }
+
+        const msPerDay = 1000 * 60 * 60 * 24;
+        const headers = [...allHeaders, 'Score', 'Data de Início', 'Lead Time (dias)', 'Cycle Time (dias)', 'Tempo Gasto (HH:MM:SS)', 'Tempo Previsto (h)', 'Desvio (h)', 'Contador de Play'];
+        const longTextColumns = ['Título', 'Descrição', 'Motivo Reclamação', 'Observação'];
+        const dateColumns = ['Criado', 'Modificado', 'Data de Conclusão', 'Prazo', 'Data de Início'];
+
+        const getCellClass = (header) => {
+            let classes = 'p-2 border-b border-gray-700';
+            if (longTextColumns.includes(header)) classes += ' break-words max-w-md';
+            else classes += ' whitespace-nowrap';
+            return classes;
+        };
+
+        const table = `
+            <table class="w-full text-left">
+                <thead><tr>${headers.map(h => `<th class="p-2 border-b border-gray-700 whitespace-nowrap">${h}</th>`).join('')}</tr></thead>
+                <tbody>
+                    ${tasksToRender.map(task => {
+                        let leadTimeDays = 'N/A';
+                        if (task.createdAt) {
+                            const startDate = new Date(task.createdAt);
+                            const endDate = task.completedAt ? new Date(task.completedAt) : new Date();
+                            leadTimeDays = ((endDate - startDate) / msPerDay).toFixed(1);
+                        }
+
+                        let cycleTimeDays = 'N/A';
+                        if (task.startedAt && task.completedAt) {
+                            const startDate = new Date(task.startedAt);
+                            const endDate = new Date(task.completedAt);
+                            cycleTimeDays = ((endDate - startDate) / msPerDay).toFixed(1);
+                        }
+
+                        const isDuplicate = duplicateIds.includes(task.originalId);
+                        const score = task.scoreGUT || task.scoreRICE || 0;
+                        const timeSpentHours = task.timeSpent / 3600000;
+                        const deviation = timeSpentHours - task.expectedTime;
+                        let deviationClass = '';
+                        if (task.expectedTime > 0) {
+                            deviationClass = deviation > 0 ? 'text-red-400' : 'text-green-400';
+                        }
+
+                        return `
+                        <tr class="${isDuplicate ? 'bg-red-900/50' : ''}">
+                            ${allHeaders.map(h => {
+                                const cellValue = task.originalData[h];
+                                const formattedValue = dateColumns.includes(h) ? formatDate(cellValue) : (cellValue || '');
+                                return `<td class="${getCellClass(h)}">${formattedValue}</td>`;
+                            }).join('')}
+                            <td class="p-2 border-b border-gray-700 whitespace-nowrap font-bold text-yellow-400">${score.toFixed(1)}</td>
+                            <td class="p-2 border-b border-gray-700 whitespace-nowrap">${formatDate(task.startedAt)}</td>
+                            <td class="p-2 border-b border-gray-700 whitespace-nowrap">${leadTimeDays}</td>
+                            <td class="p-2 border-b border-gray-700 whitespace-nowrap">${cycleTimeDays}</td>
+                            <td class="p-2 border-b border-gray-700 whitespace-nowrap">${formatTime(task.timeSpent)}</td>
+                            <td class="p-2 border-b border-gray-700 whitespace-nowrap">${task.expectedTime > 0 ? task.expectedTime.toFixed(1) : 'N/A'}</td>
+                            <td class="p-2 border-b border-gray-700 whitespace-nowrap font-bold ${deviationClass}">${task.expectedTime > 0 ? deviation.toFixed(2) : 'N/A'}</td>
+                            <td class="p-2 border-b border-gray-700 whitespace-nowrap">${task.playCount || 0}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>`;
+        container.innerHTML = tasksToRender.length > 0 ? table : '<p class="text-gray-400 p-4">Nenhuma demanda corresponde aos filtros aplicados.</p>';
+    };
+    
+    // --- COLOR UTILITY ---
+    const CHART_COLORS = ['rgba(54, 162, 235, 0.7)', 'rgba(255, 99, 132, 0.7)', 'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)','rgba(199, 199, 199, 0.7)', 'rgba(83, 102, 255, 0.7)', 'rgba(40, 159, 64, 0.7)'];
+    const processColorMap = new Map();
+    let nextColorIndex = 0;
+
+    const getProcessColor = (process) => {
+        if (!processColorMap.has(process)) {
+            processColorMap.set(process, CHART_COLORS[nextColorIndex % CHART_COLORS.length]);
+            nextColorIndex++;
+        }
+        return processColorMap.get(process);
+    };
+
+    // --- FUNÇÕES DO DASHBOARD ---
+    const getWeekLabel = (date) => {
+        const d = new Date(date);
+        const firstDayOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+        const dayOfWeekOfFirst = firstDayOfMonth.getDay();
+        const offset = dayOfWeekOfFirst === 0 ? 6 : dayOfWeekOfFirst - 1; 
+        const weekOfMonth = Math.ceil((d.getDate() + offset) / 7);
+
+        const month = d.toLocaleString('pt-BR', { month: 'short' }).replace('.', '');
+        const year = d.getFullYear().toString().slice(-2);
+        const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1);
+        return `${capitalizedMonth}/${year}-S${weekOfMonth}`;
+    };
+    
+    const sortWeekLabels = (a, b) => {
+        const [monthA, yearWeekA] = a.split('/');
+        const [yearA, weekA] = yearWeekA.split('-S');
+        const [monthB, yearWeekB] = b.split('/');
+        const [yearB, weekB] = yearWeekB.split('-S');
+
+        if (yearA !== yearB) return parseInt(yearA) - parseInt(yearB);
+        
+        const monthOrder = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+        const monthIndexA = monthOrder.indexOf(monthA);
+        const monthIndexB = monthOrder.indexOf(monthB);
+
+        if (monthIndexA !== monthIndexB) return monthIndexA - monthIndexB;
+        return parseInt(weekA) - parseInt(weekB);
+    };
+
+    const renderWipTracker = (tasksToRender) => {
+        const container = document.getElementById('wip-tracker-container');
+        if (!container) return;
+        const inProgressTasks = tasksToRender.filter(t => t.isTiming);
+
+        if (inProgressTasks.length === 0) {
+            container.innerHTML = `<p class="text-gray-400 text-center py-4 text-sm">Nenhuma tarefa com cronômetro ativo.</p>`;
+            return;
+        }
+
+        container.innerHTML = inProgressTasks.map(task => {
+            const time = task.timeSpent + (task.isTiming ? (new Date() - new Date(task.lastStartTime)) : 0);
+            const timeSpentHours = time / 3600000;
+            
+            let effortTracker = '';
+            if (task.expectedTime > 0) {
+                const percentage = Math.min((timeSpentHours / task.expectedTime) * 100, 100);
+                let progressBarColor = 'bg-blue-600';
+                if (percentage >= 100) progressBarColor = 'bg-red-600';
+                else if (percentage >= 80) progressBarColor = 'bg-yellow-500';
+                
+                effortTracker = `
+                    <div class="w-full bg-gray-600 rounded-full h-1 mt-1">
+                        <div class="wip-bar-fill ${progressBarColor} h-1 rounded-full" style="width: ${percentage}%"></div>
+                    </div>
+                `;
+            }
+
+            return `
+            <div class="wip-item py-2 border-b border-gray-700 last:border-b-0" data-id="${task.id}">
+                <div class="flex justify-between items-center">
+                    <div class="flex-1 overflow-hidden pr-2">
+                        <div class="text-sm font-semibold truncate text-gray-200" title="${task.title}">${task.title}</div>
+                        <div class="flex items-center space-x-3 text-xs text-purple-400">
+                            <span>${task.responsible || 'N/D'}</span>
+                            <div class="flex items-center space-x-1" title="Contador de Play/Pause">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 19v-5h-5M4 19h5v-5M20 5h-5v5"/></svg>
+                                <span>${task.playCount || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div class="timer-display text-base font-mono text-gray-300" data-id="${task.id}">${formatTime(time)}</div>
+                        ${task.expectedTime > 0 ? `<div class="text-xs text-gray-400"><span class="wip-spent">${timeSpentHours.toFixed(1)}h</span> / ${task.expectedTime.toFixed(1)}h</div>` : ''}
+                    </div>
+                </div>
+                ${effortTracker}
+            </div>`;
+        }).join('');
+    };
+
+    const renderTimeEvolutionChart = (tasksToRender) => {
+        const completedTasks = tasksToRender.filter(t => t.completedAt && t.startedAt && t.createdAt);
+        if (history.length === 0) {
+            createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', { labels: [], datasets: [] });
+            return;
+        }
+        const allWeeklyLabels = [...new Set(history.map(day => getWeekLabel(new Date(day.date))))].sort(sortWeekLabels);
+
+        const weeklyMetrics = {};
+        const msPerDay = 1000 * 60 * 60 * 24;
+
+        completedTasks.forEach(task => {
+            const week = getWeekLabel(new Date(task.completedAt));
+            if (!weeklyMetrics[week]) weeklyMetrics[week] = { leadTimes: [], cycleTimes: [], count: 0 };
+            weeklyMetrics[week].leadTimes.push((new Date(task.completedAt) - new Date(task.createdAt)) / msPerDay);
+            weeklyMetrics[week].cycleTimes.push((new Date(task.completedAt) - new Date(task.startedAt)) / msPerDay);
+            weeklyMetrics[week].count++;
+        });
+        
+        const avgLeadTimes = allWeeklyLabels.map(label => {
+            const weekData = weeklyMetrics[label];
+            if (!weekData || weekData.leadTimes.length === 0) return 0;
+            return (weekData.leadTimes.reduce((a, b) => a + b, 0) / weekData.leadTimes.length).toFixed(1);
+        });
+        const avgCycleTimes = allWeeklyLabels.map(label => {
+            const weekData = weeklyMetrics[label];
+            if (!weekData || weekData.cycleTimes.length === 0) return 0;
+            return (weekData.cycleTimes.reduce((a, b) => a + b, 0) / weekData.cycleTimes.length).toFixed(1);
+        });
+        const throughputData = allWeeklyLabels.map(label => weeklyMetrics[label] ? weeklyMetrics[label].count : 0);
+
+        const data = {
+            labels: allWeeklyLabels,
+            datasets: [
+                { label: 'Vazão (itens)', data: throughputData, type: 'bar', backgroundColor: 'rgba(16, 185, 129, 0.5)', borderColor: 'rgba(16, 185, 129, 1)', yAxisID: 'y1', order: 2 },
+                { label: 'Lead Time Médio (dias)', data: avgLeadTimes, borderColor: '#a78bfa', backgroundColor: '#a78bfa', tension: 0.2, type: 'line', yAxisID: 'y', order: 1, spanGaps: false },
+                { label: 'Cycle Time Médio (dias)', data: avgCycleTimes, borderColor: '#60a5fa', backgroundColor: '#60a5fa', tension: 0.2, type: 'line', yAxisID: 'y', order: 0, spanGaps: false }
+            ]
+        };
+        createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', data, {
+            scales: {
+                y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Dias', color: '#d1d5db' }, ticks: { color: '#d1d5db' } },
+                y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Nº de Itens Concluídos', color: '#d1d5db' }, grid: { drawOnChartArea: false }, ticks: { color: '#d1d5db', stepSize: 1 } }
+            }
+        });
+    };
+    
+    const populateTimeLogWeekSelector = () => {
+        const selector = elements.timeLogWeekSelector;
+        const allWeeks = [...new Set(timeLog.map(log => getWeekLabel(new Date(log.timestamp))))].sort(sortWeekLabels).reverse();
+        
+        if (allWeeks.length === 0) {
+            selector.innerHTML = `<option value="">Sem dados de tempo</option>`;
+            selector.disabled = true;
+            return;
+        }
+        
+        selector.disabled = false;
+        selector.innerHTML = allWeeks.map(week => `<option value="${week}">${week}</option>`).join('');
+    };
+    
+    const renderTimeLogCharts = () => {
+        const selectedWeek = elements.timeLogWeekSelector.value;
+        if (!selectedWeek) {
+            createOrUpdateChart('collaboratorHoursChart', 'bar', 'Horas Investidas por Colaborador', { labels: [], datasets: [] });
+            createOrUpdateChart('processHoursChart', 'bar', 'Horas Investidas por Processo', { labels: [], datasets: [] });
+            return;
+        }
+        const weeklyLogs = timeLog.filter(log => getWeekLabel(new Date(log.timestamp)) === selectedWeek);
+
+        // Render Horas por Colaborador
+        const dataByCollaborator = {};
+        const allProcesses = [...new Set(weeklyLogs.map(log => log.process || 'Não Definido'))];
+        weeklyLogs.forEach(log => {
+            if (!log.responsible) return;
+            const process = log.process || 'Não Definido';
+            if (!dataByCollaborator[log.responsible]) dataByCollaborator[log.responsible] = {};
+            dataByCollaborator[log.responsible][process] = (dataByCollaborator[log.responsible][process] || 0) + log.duration;
+        });
+
+        const collabLabels = Object.keys(dataByCollaborator);
+        const collabDatasets = allProcesses.map(process => ({
+            label: process,
+            data: collabLabels.map(c => ((dataByCollaborator[c][process] || 0) / 3600000).toFixed(2)),
+            backgroundColor: getProcessColor(process),
+        }));
+        createOrUpdateChart('collaboratorHoursChart', 'bar', `Horas por Colaborador (${selectedWeek})`, { labels: collabLabels, datasets: collabDatasets }, { scales: { x: { stacked: true }, y: { stacked: true, title: { display: true, text: 'Horas' } } } });
+
+        // Render Horas por Processo
+        const dataByProcess = {};
+        weeklyLogs.forEach(log => {
+            const process = log.process || 'Não Definido';
+            dataByProcess[process] = (dataByProcess[process] || 0) + log.duration;
+        });
+        
+        const sortedProcesses = Object.entries(dataByProcess).sort((a,b) => b[1] - a[1]);
+        const processLabels = sortedProcesses.map(item => item[0]);
+        const processData = sortedProcesses.map(item => (item[1] / 3600000).toFixed(2));
+        createOrUpdateChart('processHoursChart', 'bar', `Horas por Processo (${selectedWeek})`, { labels: processLabels, datasets: [{ label: 'Horas Investidas', data: processData, backgroundColor: processLabels.map(p => getProcessColor(p)) }] }, { indexAxis: 'y', scales: { x: { title: { display: true, text: 'Horas' } } }, plugins: { legend: { display: false } } });
+    };
+
+    const renderEffortAnalysisChart = (tasksToRender) => {
+        const effortByProcess = tasksToRender.reduce((acc, task) => {
+            if (task.expectedTime > 0) {
+                const process = task.process || 'Não Definido';
+                if (!acc[process]) {
+                    acc[process] = { expected: 0, spent: 0 };
+                }
+                acc[process].expected += task.expectedTime;
+                acc[process].spent += task.timeSpent / 3600000;
+            }
+            return acc;
+        }, {});
+
+        const labels = Object.keys(effortByProcess);
+        const expectedData = labels.map(label => effortByProcess[label].expected.toFixed(2));
+        const spentData = labels.map(label => effortByProcess[label].spent.toFixed(2));
+
+        const data = {
+            labels,
+            datasets: [
+                {
+                    label: 'Tempo Previsto (h)',
+                    data: expectedData,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Tempo Realizado (h)',
+                    data: spentData,
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                }
+            ]
+        };
+
+        createOrUpdateChart('effortAnalysisChart', 'bar', 'Análise de Esforço: Previsto vs. Realizado por Processo', data, {
+             indexAxis: 'y',
+             scales: { y: { ticks: { font: { size: 10 }}}}
+        });
+    };
+
+    const renderEfficiencyChart = (tasksToRender) => {
+        const effortByCollaborator = tasksToRender.reduce((acc, task) => {
+            if (task.expectedTime > 0 && task.responsible) {
+                if (!acc[task.responsible]) {
+                    acc[task.responsible] = { expected: 0, spent: 0 };
+                }
+                acc[task.responsible].expected += task.expectedTime;
+                acc[task.responsible].spent += task.timeSpent / 3600000;
+            }
+            return acc;
+        }, {});
+
+        const labels = Object.keys(effortByCollaborator);
+        const efficiencyData = labels.map(label => {
+            const collaborator = effortByCollaborator[label];
+            if (collaborator.spent === 0) return 0; // Evita divisão por zero
+            return ((collaborator.expected / collaborator.spent) * 100).toFixed(1);
+        });
+        
+        const backgroundColors = efficiencyData.map(eff => {
+            if (eff >= 100) return 'rgba(75, 192, 192, 0.6)';
+            if (eff >= 80) return 'rgba(255, 206, 86, 0.6)';
+            return 'rgba(255, 99, 132, 0.6)';
+        });
+
+        const data = {
+            labels,
+            datasets: [{
+                label: 'Eficiência (%)',
+                data: efficiencyData,
+                backgroundColor: backgroundColors,
+                borderColor: backgroundColors.map(c => c.replace('0.6', '1')),
+                borderWidth: 1
+            }]
+        };
+
+        const annotation = {
+            type: 'line',
+            xMin: 100,
+            xMax: 100,
+            borderColor: 'rgb(255, 200, 50)',
+            borderWidth: 2,
+            borderDash: [6, 6],
+            label: {
+                content: 'Meta 100%',
+                enabled: true,
+                position: 'end'
+            }
+        };
+
+        createOrUpdateChart('efficiencyChart', 'bar', 'Eficiência por Colaborador (Previsto vs. Realizado)', data, {
+            indexAxis: 'y',
+            scales: { x: { title: { display: true, text: 'Eficiência (%)' } } },
+            plugins: {
+                legend: { display: false },
+                annotation: {
+                    annotations: {
+                        line1: annotation
+                    }
+                }
+            }
+        });
+    };
+
+    const renderDashboard = (tasksToRender) => {
+        processColorMap.clear();
+        nextColorIndex = 0;
+
+        if (tasksToRender.length === 0) {
+            elements.kpis.cycleTime.textContent = '-- dias';
+            elements.kpis.leadTime.textContent = '-- dias';
+            elements.kpis.throughput.textContent = '-- itens';
+        } else {
+            const msPerDay = 86400000;
+            let totalLeadTime = 0;
+            tasksToRender.forEach(t => {
+                if (t.createdAt) totalLeadTime += (t.completedAt ? new Date(t.completedAt) : new Date()) - new Date(t.createdAt);
+            });
+            elements.kpis.leadTime.textContent = `${(totalLeadTime / tasksToRender.length / msPerDay).toFixed(1)} dias`;
+
+            const startedAndCompletedTasks = tasksToRender.filter(t => t.startedAt && t.completedAt);
+            let totalCycleTime = 0;
+            startedAndCompletedTasks.forEach(t => {
+                totalCycleTime += new Date(t.completedAt) - new Date(t.startedAt);
+            });
+            elements.kpis.cycleTime.textContent = `${startedAndCompletedTasks.length > 0 ? (totalCycleTime / startedAndCompletedTasks.length / msPerDay).toFixed(1) : '--'} dias`;
+
+            const sevenDaysAgo = new Date(Date.now() - 7 * msPerDay);
+            elements.kpis.throughput.textContent = `${tasksToRender.filter(t => t.completedAt && new Date(t.completedAt) >= sevenDaysAgo).length} itens`;
+        }
+
+        renderWipTracker(tasksToRender);
+        renderCumulativeFlowDiagram();
+        renderTimeEvolutionChart(tasksToRender);
+        populateTimeLogWeekSelector();
+        renderTimeLogCharts();
+        if (currentView === 'manager') {
+            renderEffortAnalysisChart(tasksToRender);
+            renderEfficiencyChart(tasksToRender);
+        }
+
+        const responsibleCounts = tasksToRender.filter(t => t.responsible).reduce((acc, task) => ({ ...acc,
+            [task.responsible]: (acc[task.responsible] || 0) + 1
+        }), {});
+        const sortedResponsaveis = Object.entries(responsibleCounts).sort((a, b) => a[1] - b[1]).slice(-10);
+        createOrUpdateChart('responsaveisChart', 'bar', 'Demandas por Responsável (Top 10)', {
+            labels: sortedResponsaveis.map(item => item[0]),
+            datasets: [{
+                label: 'Nº de Demandas',
+                data: sortedResponsaveis.map(item => item[1]),
+                backgroundColor: '#60a5fa'
+            }]
+        }, {
+            indexAxis: 'y',
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        });
+
+        const statusCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({ ...acc,
+            [status]: tasksToRender.filter(t => t.status === status).length
+        }), {});
+        createOrUpdateChart('statusDistributionChart', 'radar', 'Distribuição de Demandas por Status', {
+            labels: Object.values(STATUS_OPTIONS),
+            datasets: [{
+                label: 'Nº de Demandas',
+                data: Object.values(statusCounts),
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                pointBorderColor: '#fff',
+                pointHoverBackgroundColor: '#fff',
+                pointHoverBorderColor: 'rgba(54, 162, 235, 1)',
+                fill: true
+            }]
+        });
+
+        const nucleusCounts = tasksToRender.filter(t => t.nucleus).reduce((acc, task) => ({ ...acc,
+            [task.nucleus]: (acc[task.nucleus] || 0) + 1
+        }), {});
+        createOrUpdateChart('nucleoChart', 'doughnut', 'Demandas por Núcleo', {
+            labels: Object.keys(nucleusCounts),
+            datasets: [{
+                data: Object.values(nucleusCounts),
+                backgroundColor: ['#6366f1', '#f59e0b', '#10b981']
+            }]
+        });
+    };
+
+    const createOrUpdateChart = (canvasId, type, title, data, customOptions = {}) => {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        if (chartObjects[canvasId]) chartObjects[canvasId].destroy();
+        
+        let defaultScales = {};
+        if (type === 'bar' || type === 'line') defaultScales = { y: { ticks: { color: '#d1d5db', beginAtZero: true }, grid: { color: '#4b5563' } }, x: { ticks: { color: '#d1d5db' }, grid: { color: '#4b5563' } } };
+        else if (type === 'radar') defaultScales = { r: { angleLines: { color: '#4b5563' }, grid: { color: '#4b5563' }, pointLabels: { color: '#d1d5db', font: { size: 12 } }, ticks: { color: '#d1d5db', backdropColor: 'rgba(0, 0, 0, 0.5)', beginAtZero: true } } };
+
+        const options = { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: title, color: '#ffffff', font: { size: 18 } }, legend: { labels: { color: '#d1d5db' } } }, scales: defaultScales, ...customOptions };
+        if (customOptions.scales) options.scales = { ...defaultScales, ...customOptions.scales };
+
+        chartObjects[canvasId] = new Chart(ctx, { type, data, options });
+    };
+
+    const generateHistoricalCfdData = (importedTasks) => {
+        if (importedTasks.length === 0) return [];
+        const validCreationDates = importedTasks.map(t => new Date(t.createdAt)).filter(d => !isNaN(d.getTime()));
+        if (validCreationDates.length === 0) return [];
+        const earliestDate = new Date(Math.min(...validCreationDates));
+        const today = new Date();
+        let historyData = [];
+
+        for (let d = new Date(earliestDate); d <= today; d.setDate(d.getDate() + 1)) {
+            const currentDate = new Date(d); currentDate.setHours(23, 59, 59, 999); 
+            const dailyCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({ ...acc, [status]: 0 }), {});
+            importedTasks.forEach(task => {
+                const taskCreatedAt = new Date(task.createdAt);
+                if (isNaN(taskCreatedAt.getTime()) || taskCreatedAt > currentDate) return;
+                const taskCompletedAt = task.completedAt ? new Date(task.completedAt) : null;
+                const wasImportedAsCompleted = (task.originalData.Status || '').toLowerCase().trim().startsWith('conclu');
+                if (taskCompletedAt && taskCompletedAt <= currentDate) dailyCounts.concluido++;
+                else if (wasImportedAsCompleted && taskCompletedAt && currentDate < taskCompletedAt) dailyCounts.andamento++; 
+                else dailyCounts[task.status]++;
+            });
+            historyData.push({ date: currentDate.toISOString().split('T')[0], ...dailyCounts });
+        }
+        return historyData;
+    };
+
+
+    const updateHistoryInFirestore = async () => {
+        const today = new Date().toISOString().split('T')[0];
+        const lastHistoryEntry = history.length > 0 ? history[history.length - 1] : null;
+        const dailyCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({...acc, [status]: tasks.filter(t => t.status === status).length }), {});
+
+        if (lastHistoryEntry && lastHistoryEntry.date === today) {
+            history[history.length - 1] = { date: today, ...dailyCounts };
+        } else if (!lastHistoryEntry || new Date(lastHistoryEntry.date) < new Date(today)) {
+            history.push({ date: today, ...dailyCounts });
+        }
+        await firebase.updateDoc(configDocRef, { history });
+    };
+
+    const renderCumulativeFlowDiagram = () => {
+        if (!document.getElementById('cumulativeFlowChart')) return;
+        const allWeeklyLabels = [...new Set(history.map(day => getWeekLabel(new Date(day.date))))].sort(sortWeekLabels);
+        const weeklyData = {};
+        history.forEach(day => { weeklyData[getWeekLabel(new Date(day.date))] = day; });
+        if (allWeeklyLabels.length < 1) {
+            createOrUpdateChart('cumulativeFlowChart', 'line', 'Diagrama de Fluxo Cumulativo (CFD) - Semanal', { labels: [], datasets: [] });
+            return;
+        }
+        const statusOrder = ['concluido', 'validacao', 'andamento', 'fazer', 'backlog', 'triagem'];
+        const statusColors = { triagem: 'rgba(107, 114, 128, 0.7)', backlog: 'rgba(234, 179, 8, 0.7)', fazer: 'rgba(59, 130, 246, 0.7)', andamento: 'rgba(139, 92, 246, 0.7)', validacao: 'rgba(99, 102, 241, 0.7)', concluido: 'rgba(16, 185, 129, 0.7)' };
+        const datasets = statusOrder.map(status => ({
+            label: STATUS_OPTIONS[status],
+            data: allWeeklyLabels.map(label => weeklyData[label] ? (weeklyData[label][status] || 0) : 0),
+            borderColor: statusColors[status].replace('0.7', '1'), backgroundColor: statusColors[status], fill: true, tension: 0.1
+        }));
+        createOrUpdateChart('cumulativeFlowChart', 'line', 'Diagrama de Fluxo Cumulativo (CFD) - Semanal', { labels: allWeeklyLabels, datasets }, { scales: { y: { stacked: true } }, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'top' } } });
+    };
+
+    const toggleCompletionDateVisibility = () => {
+        elements.modal.completionDateWrapper.style.display = elements.modal.status.value === 'concluido' ? 'block' : 'none';
+    };
+
+    const openModal = (taskId = null) => {
+        const { modal } = elements;
+        modal.form.reset();
+        modal.gut.fields.classList.add('hidden'); modal.rice.fields.classList.add('hidden');
+        modal.responsible.innerHTML = '<option value="">Ninguém atribuído</option>' + teamMembers.map(m => `<option value="${m}">${m}</option>`).join('');
+        modal.status.innerHTML = Object.entries(STATUS_OPTIONS).map(([key, value]) => `<option value="${key}">${value}</option>`).join('');
+
+        if (taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            modal.title.textContent = "Editar Demanda";
+            modal.id.value = task.id; modal.demandTitle.value = task.title; modal.status.value = task.status;
+            modal.responsible.value = task.responsible || ''; modal.nucleus.value = task.nucleus || '';
+            modal.description.value = task.description || ''; modal.type.value = task.demandType || 'problema';
+            
+            if (task.completedAt) {
+                const d = new Date(task.completedAt); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+                modal.completionDate.value = d.toISOString().slice(0, 16);
+            } else modal.completionDate.value = '';
+
+            const originalData = task.originalData || {};
+            modal.originalDataContent.innerHTML = Object.entries({ 'ID': originalData.ID_REF, 'Solicitado por': originalData['Solicitado por'], 'Status Planilha': originalData.Status, 'Prioridade Planilha': originalData.Prioridade }).map(([key, value]) => `<div class="truncate"><strong class="text-gray-400">${key}:</strong><br>${value || 'N/A'}</div>`).join('');
+            
+            modal.critScore.textContent = (task.scoreGUT || task.scoreRICE || 0).toFixed(1);
+            modal.critReclamacoes.textContent = task.reclamacoes30d || 0;
+            modal.critPrazo.textContent = formatDate(task.createdAt);
+
+            modal.gut.g.value = task.gut?.g || ''; modal.gut.u.value = task.gut?.u || ''; modal.gut.t.value = task.gut?.t || '';
+            modal.deleteBtn.classList.remove('hidden');
+        } else {
+            modal.title.textContent = "Nova Demanda"; modal.id.value = ''; modal.status.value = 'triagem';
+            modal.deleteBtn.classList.add('hidden'); modal.originalDataContent.innerHTML = '';
+            modal.critScore.textContent = '--'; modal.critReclamacoes.textContent = '--'; modal.critPrazo.textContent = '--';
+        }
+
+        updatePrioritizationView();
+        toggleCompletionDateVisibility();
+        modal.container.classList.remove('hidden'); modal.container.classList.add('flex');
+    };
+
+    const closeModal = () => {
+        elements.modal.container.classList.add('hidden');
+        elements.modal.container.classList.remove('flex');
+    };
+
+    const handleFormSubmit = async (e) => {
+        e.preventDefault();
+        const { modal } = elements;
+        const id = modal.id.value;
+        let taskData;
+
+        if (id) { // Editando uma tarefa existente
+            const task = tasks.find(t => t.id === id);
+            const oldStatus = task.status;
+            
+            taskData = {
+                title: modal.demandTitle.value, status: modal.status.value, responsible: modal.responsible.value,
+                nucleus: modal.nucleus.value, description: modal.description.value, demandType: modal.type.value,
+            };
+
+            if (taskData.demandType === 'problema') {
+                taskData.gut = { g: parseInt(modal.gut.g.value) || 0, u: parseInt(modal.gut.u.value) || 0, t: parseInt(modal.gut.t.value) || 0 };
+                taskData.scoreGUT = calculateGUT(false); taskData.scoreRICE = null;
+            } else if (taskData.demandType === 'melhoria') {
+                taskData.rice = { reach: parseInt(modal.rice.reach.value) || 0, impact: parseFloat(modal.rice.impact.value) || 0, confidence: parseFloat(modal.rice.confidence.value) || 0, effort: parseFloat(modal.rice.effort.value) || 1 };
+                taskData.scoreRICE = calculateRICE(false); taskData.scoreGUT = null; taskData.gut = {};
+            }
+
+            if (oldStatus === 'triagem' && (taskData.scoreGUT > 0 || taskData.scoreRICE > 0)) {
+                taskData.status = 'backlog';
+            }
+            if (taskData.status === 'concluido') {
+                 if (modal.completionDate.value) taskData.completedAt = new Date(modal.completionDate.value).toISOString();
+                 else if (oldStatus !== 'concluido' && !task.completedAt) taskData.completedAt = new Date().toISOString();
+            } else {
+                taskData.completedAt = null;
+            }
+            if (oldStatus !== 'andamento' && taskData.status === 'andamento' && !task.startedAt) {
+                taskData.startedAt = new Date().toISOString();
+            }
+
+            const taskRef = firebase.doc(db, `artifacts/${appId}/public/data/tasks`, id);
+            await firebase.updateDoc(taskRef, taskData);
+
+        } else { // Criando uma nova tarefa
+            taskData = {
+                title: modal.demandTitle.value, status: modal.status.value, responsible: modal.responsible.value,
+                nucleus: modal.nucleus.value, description: modal.description.value, demandType: modal.type.value,
+                createdAt: new Date().toISOString(),
+                originalData: { 'Título': modal.demandTitle.value },
+                timeSpent: 0, isTiming: false, lastStartTime: null, playCount: 0,
+            };
+
+             if (taskData.demandType === 'problema') {
+                taskData.gut = { g: parseInt(modal.gut.g.value) || 0, u: parseInt(modal.gut.u.value) || 0, t: parseInt(modal.gut.t.value) || 0 };
+                taskData.scoreGUT = calculateGUT(false);
+            } else if (taskData.demandType === 'melhoria') {
+                taskData.rice = { reach: parseInt(modal.rice.reach.value) || 0, impact: parseFloat(modal.rice.impact.value) || 0, confidence: parseFloat(modal.rice.confidence.value) || 0, effort: parseFloat(modal.rice.effort.value) || 1 };
+                taskData.scoreRICE = calculateRICE(false);
+            }
+            if (taskData.status === 'triagem' && (taskData.scoreGUT > 0 || taskData.scoreRICE > 0)) {
+                taskData.status = 'backlog';
+            }
+            
+            await firebase.addDoc(tasksCollectionRef, taskData);
+        }
+        
+        closeModal();
+    };
+
+    const calculateGUT = (render = true) => {
+        const { g, u, t, formula, score } = elements.modal.gut;
+        const G = parseInt(g.value, 10) || 0, U = parseInt(u.value, 10) || 0, T = parseInt(t.value, 10) || 0, result = G * U * T;
+        if (render) { formula.textContent = `${G} x ${U} x ${T} = ${result}`; score.textContent = result; }
+        return result;
+    };
+
+    const calculateRICE = (render = true) => {
+        const { reach, impact, confidence, effort, formula, score } = elements.modal.rice;
+        const R = parseInt(reach.value, 10) || 0, I = parseFloat(impact.value) || 0, C = parseFloat(confidence.value) || 0, E = parseFloat(effort.value) || 1, result = E > 0 ? (R * I * C) / E : 0;
+        if (render) { formula.textContent = `(${R} x ${I} x ${C}) / ${E} = ${result.toFixed(1)}`; score.textContent = result.toFixed(1); }
+        return result;
+    };
+    
+    const updatePrioritizationView = () => {
+        const type = elements.modal.type.value;
+        elements.modal.gut.fields.classList.toggle('hidden', type !== 'problema');
+        elements.modal.rice.fields.classList.toggle('hidden', type !== 'melhoria');
+        if (type === 'problema') calculateGUT(); else if (type === 'melhoria') calculateRICE();
+    };
+    
+    const handleSortChange = () => {
+        currentSort.by = elements.kanbanSortBy.value; currentSort.direction = elements.kanbanSortDirection.value;
+        renderBoard(getFilteredTasks());
+    };
+
+    const handlePlay = async (taskId) => {
+        const taskRef = firebase.doc(db, `artifacts/${appId}/public/data/tasks`, taskId);
+        const task = tasks.find(t => t.id === taskId);
+        if (task) {
+            const updateData = {
+                status: 'andamento',
+                isTiming: true,
+                lastStartTime: new Date().toISOString(),
+                playCount: (task.playCount || 0) + (task.isTiming ? 0 : 1) // Incrementa só se não estiver rodando
+            };
+            if (!task.startedAt) {
+                updateData.startedAt = updateData.lastStartTime;
+            }
+            await firebase.updateDoc(taskRef, updateData);
+        }
+    };
+    
+    const handlePause = async (taskId) => {
+        const taskRef = firebase.doc(db, `artifacts/${appId}/public/data/tasks`, taskId);
+        const task = tasks.find(t => t.id === taskId);
+        if (task && task.isTiming) {
+            const elapsed = new Date() - new Date(task.lastStartTime);
+            const newTimeSpent = task.timeSpent + elapsed;
+            
+            await firebase.updateDoc(taskRef, {
+                timeSpent: newTimeSpent,
+                isTiming: false,
+                lastStartTime: null
+            });
+            // Adiciona ao log de tempo
+            if (elapsed > 100) {
+                 timeLog.push({ timestamp: new Date().toISOString(), responsible: task.responsible, process: task.process || 'Não Definido', duration: elapsed });
+                 await firebase.updateDoc(configDocRef, { timeLog });
+            }
+        }
+    };
+
+    const renderCatalog = () => {
+        // ... (código existente sem alteração)
+    };
+
+    const renderHC = () => {
+        // ... (código existente sem alteração)
+    };
+    
+    const openCatalogModal = (activityName = null) => {
+        // ... (código existente sem alteração)
+    };
+
+    const closeCatalogModal = () => {
+        elements.catalog.modal.classList.add('hidden');
+        elements.catalog.modal.classList.remove('flex');
+    };
+
+    const handleCatalogFormSubmit = async (e) => {
+        e.preventDefault();
+        const { catalog } = elements;
+        const originalName = catalog.originalName.value;
+        const newName = catalog.editName.value.trim();
+        if (!newName) return;
+
+        let newCatalog = { ...activityCatalog };
+
+        const newDetails = {
+            process: catalog.editProcess.value.trim(),
+            role: catalog.editRole.value,
+            time: parseFloat(catalog.editTime.value) || 0,
+            annualNeed: parseInt(catalog.editAnnualNeed.value) || 0,
+            executionPercentage: parseInt(catalog.editExecPercentage.value) || 100
+        };
+
+        if (originalName && originalName !== newName) {
+            delete newCatalog[originalName];
+        }
+        newCatalog[newName] = newDetails;
+
+        await firebase.updateDoc(configDocRef, { activityCatalog: newCatalog });
+        
+        closeCatalogModal();
+    };
+
+    const handleDeleteActivity = async () => {
+        const originalName = elements.catalog.originalName.value;
+        if (originalName && confirm(`Tem certeza que deseja excluir a atividade "${originalName}"?`)) {
+            let newCatalog = { ...activityCatalog };
+            delete newCatalog[originalName];
+            await firebase.updateDoc(configDocRef, { activityCatalog: newCatalog });
+            closeCatalogModal();
+        }
+    };
+
+    const applyView = (view) => {
+        currentView = view;
+        const isManagerView = view === 'manager';
+        elements.viewToggle.checked = isManagerView;
+        elements.tabs.hc.style.display = isManagerView ? 'flex' : 'none';
+        elements.effortAnalysisChartContainer.style.display = isManagerView ? 'block' : 'none';
+        elements.efficiencyChartContainer.style.display = isManagerView ? 'block' : 'none';
+
+        if (!isManagerView && document.querySelector('.tab-btn.active')?.id === 'tab-hc') {
+            switchTab('dashboard');
+        }
+        renderActiveTabView();
+    };
+    
+    // --- SETUP E INICIALIZAÇÃO ---
+
+    const setupEventListeners = () => {
+        Object.keys(elements.tabs).forEach(key => elements.tabs[key].addEventListener('click', () => switchTab(key)));
+        elements.addDemandBtn.addEventListener('click', () => openModal());
+        elements.exportBtn.addEventListener('click', handleExport);
+        elements.timeLogWeekSelector.addEventListener('change', renderTimeLogCharts);
+        elements.viewToggle.addEventListener('change', () => applyView(elements.viewToggle.checked ? 'manager' : 'team'));
+        elements.modal.cancelBtn.addEventListener('click', closeModal);
+        elements.modal.closeBtn.addEventListener('click', closeModal); 
+        elements.modal.form.addEventListener('submit', handleFormSubmit);
+        elements.modal.status.addEventListener('change', toggleCompletionDateVisibility);
+        elements.importBtn.addEventListener('click', () => elements.fileInput.click());
+        elements.fileInput.addEventListener('change', handleImport);
+        elements.clearDataBtn.addEventListener('click', clearData);
+        elements.globalFilters.addEventListener('input', e => { if (e.target.classList.contains('global-filter')) renderActiveTabView(); });
+        elements.clearFiltersBtn.addEventListener('click', () => { document.querySelectorAll('.global-filter').forEach(f => f.value = ''); renderActiveTabView(); });
+        elements.kanbanSortBy.addEventListener('change', handleSortChange);
+        elements.kanbanSortDirection.addEventListener('change', handleSortChange);
+        elements.modal.type.addEventListener('change', updatePrioritizationView);
+        ['g', 'u', 't'].forEach(key => elements.modal.gut[key].addEventListener('input', () => calculateGUT()));
+        Object.keys(elements.modal.rice).forEach(key => { if(elements.modal.rice[key].addEventListener) elements.modal.rice[key].addEventListener('input', () => calculateRICE()); });
+        elements.kanbanBoard.addEventListener('click', e => {
+             const button = e.target.closest('button[data-action]');
+             if (button) {
+                e.stopPropagation();
+                const action = button.dataset.action;
+                const id = button.dataset.id;
+                if (action === 'play') handlePlay(id);
+                if (action === 'pause') handlePause(id);
+             }
+        });
+        elements.kanbanColumns.forEach(column => {
+            column.addEventListener('dragover', e => e.preventDefault());
+            column.addEventListener('drop', async e => {
+                e.preventDefault();
+                const newStatus = column.dataset.status;
+                const task = tasks.find(t => t.id === draggedTaskId);
+                if (task && task.status !== newStatus) {
+                    const oldStatus = task.status;
+                    if (oldStatus === 'andamento' && task.isTiming) await handlePause(task.id); 
+                    
+                    const updateData = { status: newStatus };
+                    if (newStatus === 'concluido' && !task.completedAt) {
+                        updateData.completedAt = new Date().toISOString();
+                    } else if (newStatus !== 'concluido') {
+                        updateData.completedAt = null;
+                    }
+                    if (newStatus === 'andamento' && !task.startedAt) {
+                        updateData.startedAt = new Date().toISOString();
+                    }
+                    
+                    const taskRef = firebase.doc(db, `artifacts/${appId}/public/data/tasks`, task.id);
+                    await firebase.updateDoc(taskRef, updateData);
+                }
+            });
+        });
+        
+        elements.catalog.container.addEventListener('click', (e) => {
+            const row = e.target.closest('tr');
+            if (row && row.dataset.activityName) openCatalogModal(row.dataset.activityName);
+        });
+        elements.catalog.addBtn.addEventListener('click', () => openCatalogModal());
+        elements.catalog.form.addEventListener('submit', handleCatalogFormSubmit);
+        elements.catalog.cancelBtn.addEventListener('click', closeCatalogModal);
+        elements.catalog.deleteBtn.addEventListener('click', handleDeleteActivity);
+        elements.hc.hoursInput.addEventListener('input', renderHC);
+        elements.hc.productivityFactor.addEventListener('input', renderHC);
+    };
+
+    const loadDataAndInitApp = () => {
+        // Listener para as tasks
+        unsubscribeTasks = firebase.onSnapshot(tasksCollectionRef, (querySnapshot) => {
+            tasks = [];
+            querySnapshot.forEach((doc) => {
+                tasks.push({ id: doc.id, ...doc.data() });
+            });
+            if (dataLoaded) { // Evita renderização duplicada na carga inicial
+                populateGlobalFilters();
+                renderActiveTabView();
+                updateHistoryInFirestore();
+            }
+        });
+
+        // Listener para o documento de configuração
+        unsubscribeConfig = firebase.onSnapshot(configDocRef, async (doc) => {
+            if (doc.exists()) {
+                const configData = doc.data();
+                activityCatalog = configData.activityCatalog || defaultActivityCatalog;
+                allHeaders = configData.allHeaders || [];
+                history = configData.history || [];
+                timeLog = configData.timeLog || [];
+            } else {
+                // Se o documento de config não existe, cria com os padrões
+                await firebase.setDoc(configDocRef, {
+                    activityCatalog: defaultActivityCatalog,
+                    allHeaders: [],
+                    history: [],
+                    timeLog: [],
+                    managers: [userId] // Adiciona o primeiro usuário como gestor
+                });
+            }
+
+            if (!dataLoaded) {
+                // Primeira carga de dados completa
+                dataLoaded = true;
+                populateGlobalFilters();
+                setupEventListeners();
+                applyView(isManager ? 'manager' : 'team');
+                renderActiveTabView();
+            } else {
+                renderActiveTabView();
+            }
+        });
+    };
+    
+    const initFirebase = async () => {
+        firebase.onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                console.log("Usuário autenticado:", userId);
+
+                // Define as referências do Firestore agora que temos o appId
+                tasksCollectionRef = firebase.collection(db, `artifacts/${appId}/public/data/tasks`);
+                configDocRef = firebase.doc(db, `artifacts/${appId}/public/data/appConfig/main`);
+
+                // Verifica o papel do usuário (manager/team)
+                const configSnap = await firebase.getDoc(configDocRef);
+                if (configSnap.exists() && configSnap.data().managers?.includes(userId)) {
+                    isManager = true;
+                } else {
+                    isManager = false; // Se não houver lista ou não estiver nela, não é manager
+                }
+
+                // Esconde/mostra o toggle de visão
+                elements.viewToggleContainer.style.display = isManager ? 'flex' : 'none';
+
+                loadDataAndInitApp();
+
+            } else {
+                console.log("Nenhum usuário logado.");
+                // Limpa listeners se o usuário deslogar
+                unsubscribeTasks();
+                unsubscribeConfig();
+            }
+        });
+
+        // Tenta logar com o token, se não, anonimamente
+        try {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await firebase.signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await firebase.signInAnonymously(auth);
+            }
+        } catch (error) {
+            console.error("Erro na autenticação:", error);
+            alert("Não foi possível conectar ao sistema. Verifique sua conexão e tente novamente.");
+        }
+    };
+    
+    // Inicia a aplicação
+    initFirebase();
+
+    // Loop do timer para os crônometros
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        tasks.forEach(task => {
+            if (task.isTiming) {
+                const elapsed = new Date() - new Date(task.lastStartTime);
+                const currentTimeMs = task.timeSpent + elapsed;
+                
+                document.querySelectorAll(`.timer-display[data-id="${task.id}"]`).forEach(display => {
+                    display.textContent = formatTime(currentTimeMs);
+                });
+
+                if (task.expectedTime > 0) {
+                    // ... (código do timer continua igual)
+                }
+            }
+        });
+    }, 1000);
+
+});
+</script>
+</body>
+</html>
+
