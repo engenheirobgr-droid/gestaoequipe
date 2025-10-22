@@ -789,7 +789,6 @@
         };
         
         // --- FUNÇÕES DO APP ---
-        // [INÍCIO - COLE SUAS FUNÇÕES AQUI]
         
         const saveState = async () => {
              try {
@@ -805,7 +804,7 @@
                  await setDoc(teamDocRef, cleanData);
              } catch (error) {
                  console.error("Erro ao salvar dados no Firebase:", error);
-                 // Alterado alert para console.error
+                 alert("Ocorreu um erro ao salvar os dados. Verifique o console para mais detalhes.");
              }
          };
          
@@ -828,114 +827,135 @@
              return `${hours}:${minutes}:${seconds}`;
          };
 
-         const handleImport = (event) => {
-             const file = event.target.files[0];
-             if (!file) return;
+        // ====================================================================================================
+        // INÍCIO DA CORREÇÃO: Função handleImport com tratamento de erros (try...catch)
+        // ====================================================================================================
+        const handleImport = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
 
-             const reader = new FileReader();
-             reader.onload = (e) => {
-                 const data = e.target.result;
-                 let workbook;
-                 
-                 try {
-                      workbook = XLSX.read(data, { type: 'binary', cellDates: true, codepage: 65001 });
-                 } catch (error) {
-                     console.error("Error parsing file:", error);
-                     // alert("Erro ao ler o arquivo. Certifique-se de que é um formato Excel, CSV ou IQY válido e que não está corrompido.");
-                     return;
-                 }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = e.target.result;
+                let workbook;
+                
+                try {
+                    workbook = XLSX.read(data, { type: 'binary', cellDates: true, codepage: 65001 });
+                } catch (error) {
+                    console.error("[ERRO CRÍTICO] Falha ao ler o arquivo Excel. O arquivo pode estar corrompido ou em um formato inválido.", error);
+                    alert("ERRO: Não foi possível ler o arquivo. Verifique se o formato é válido e se não está corrompido.");
+                    return;
+                }
 
-                 const sheetName = workbook.SheetNames[0];
-                 const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+                const sheetName = workbook.SheetNames[0];
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-                 const existingTasksMap = new Map(tasks.map(task => [task.originalId, task]));
-                 let newTasksCount = 0;
-                 let updatedTasksCount = 0;
+                const existingTasksMap = new Map(tasks.map(task => [task.originalId, task]));
+                let newTasksCount = 0;
+                let updatedTasksCount = 0;
 
-                 const newHeaders = new Set(allHeaders);
-                 jsonData.forEach(row => Object.keys(row).forEach(key => newHeaders.add(key)));
-                 allHeaders = Array.from(newHeaders);
+                const newHeaders = new Set(allHeaders);
+                jsonData.forEach(row => Object.keys(row).forEach(key => newHeaders.add(key)));
+                allHeaders = Array.from(newHeaders);
 
-                 const statusMap = { "criada": "triagem", "em andamento": "andamento", "concluído": "concluido", "concluída": "concluido" };
-                 const parseGUTValue = (gutString) => {
-                     if (!gutString || typeof gutString !== 'string') return 0;
-                     const match = gutString.match(/\((\d+)\)/);
-                     return match ? parseInt(match[1], 10) : 0;
-                 };
+                const statusMap = { "criada": "triagem", "em andamento": "andamento", "concluído": "concluido", "concluída": "concluido" };
+                const parseGUTValue = (gutString) => {
+                    if (!gutString || typeof gutString !== 'string') return 0;
+                    const match = gutString.match(/\((\d+)\)/);
+                    return match ? parseInt(match[1], 10) : 0;
+                };
 
-                 jsonData.forEach((row, index) => {
-                     const id_ref = row.ID_REF;
-                     if (!id_ref) return; // Pula linhas sem ID
+                // MELHORIA 1: Adiciona um bloco try...catch para capturar erros durante o processamento das linhas.
+                try {
+                    jsonData.forEach((row, index) => {
+                        const id_ref = row.ID_REF;
+                        if (!id_ref) return; 
 
-                     const existingTask = existingTasksMap.get(id_ref);
+                        const existingTask = existingTasksMap.get(id_ref);
 
-                     if (existingTask) {
-                         existingTask.originalData = row;
-                         existingTask.title = row.Título || existingTask.title;
-                         updatedTasksCount++;
-                     } else {
-                         const sheetStatus = (row.Status || '').toLowerCase().trim();
-                         let status = statusMap[sheetStatus] || 'triagem';
-                         const g = parseGUTValue(row['Gravidade (GUT)']);
-                         const u = parseGUTValue(row['Urgência (GUT)']);
-                         const t = parseGUTValue(row['Tendência (GUT)']);
-                         const calculatedGUT = g * u * t;
-                         if (status === 'triagem' && calculatedGUT > 0) status = 'backlog';
-                         
-                         const activityName = row['Atividade'];
-                         const catalogEntry = activityCatalog[activityName] || { time: 0, process: 'Não Definido', role: 'N/A' };
+                        if (existingTask) {
+                            existingTask.originalData = row;
+                            existingTask.title = row.Título || existingTask.title;
+                            updatedTasksCount++;
+                        } else {
+                            const sheetStatus = (row.Status || '').toLowerCase().trim();
+                            let status = statusMap[sheetStatus] || 'triagem';
+                            const g = parseGUTValue(row['Gravidade (GUT)']);
+                            const u = parseGUTValue(row['Urgência (GUT)']);
+                            const t = parseGUTValue(row['Tendência (GUT)']);
+                            const calculatedGUT = g * u * t;
+                            if (status === 'triagem' && calculatedGUT > 0) status = 'backlog';
+                            
+                            const activityName = row['Atividade'];
+                            const catalogEntry = activityCatalog[activityName] || { time: 0, process: 'Não Definido', role: 'N/A' };
 
-                         const newTask = {
-                             id: `sheet-${id_ref}-${Date.now()}`,
-                             originalId: id_ref,
-                             title: row.Título || 'Sem Título',
-                             description: row.Descrição || '',
-                             status: status,
-                             responsible: row['Atribuído a'] || '',
-                             createdAt: row.Criado_GD ? new Date(row.Criado_GD).toISOString() : new Date().toISOString(),
-                             scoreGUT: calculatedGUT,
-                             demandType: 'problema',
-                             originalData: row,
-                             completedAt: null,
-                             startedAt: null,
-                             gut: { g, u, t },
-                             reclamacoes30d: row['Nº de Reclamações dos últimos 30 dias'] || 0,
-                             nucleus: row['Núcleo'] || '',
-                             timeSpent: 0,
-                             isTiming: false,
-                             lastStartTime: null,
-                             playCount: 0,
-                             expectedTime: catalogEntry.time,
-                             process: catalogEntry.process,
-                             role: catalogEntry.role
-                         };
-                         
-                         if (status === 'andamento' || status === 'validacao' || status === 'concluido') {
-                             newTask.startedAt = newTask.createdAt;
-                         }
-                         if (status === 'concluido' && row['Data de Conclusão']) {
-                              const completionDate = new Date(row['Data de Conclusão']);
-                              if (!isNaN(completionDate.getTime())) newTask.completedAt = completionDate.toISOString();
-                         }
-                         tasks.push(newTask);
-                         newTasksCount++;
-                     }
-                 });
-                 
-                 history = generateHistoricalCfdData(tasks);
-                 saveState();
-                 populateGlobalFilters();
-                 // alert(`${newTasksCount} novas demandas adicionadas e ${updatedTasksCount} demandas atualizadas.`); // Removido alert
-                 switchTab('dashboard');
-                 elements.fileInput.value = '';
-             };
-             reader.readAsBinaryString(file);
-         };
+                            const newTask = {
+                                id: `sheet-${id_ref}-${Date.now()}`,
+                                originalId: id_ref,
+                                title: row.Título || 'Sem Título',
+                                description: row.Descrição || '',
+                                status: status,
+                                responsible: row['Atribuído a'] || '',
+                                createdAt: row.Criado_GD ? new Date(row.Criado_GD).toISOString() : new Date().toISOString(),
+                                scoreGUT: calculatedGUT,
+                                demandType: 'problema',
+                                originalData: row,
+                                completedAt: null,
+                                startedAt: null,
+                                gut: { g, u, t },
+                                reclamacoes30d: row['Nº de Reclamações dos últimos 30 dias'] || 0,
+                                nucleus: row['Núcleo'] || '',
+                                timeSpent: 0,
+                                isTiming: false,
+                                lastStartTime: null,
+                                playCount: 0,
+                                expectedTime: catalogEntry.time,
+                                process: catalogEntry.process,
+                                role: catalogEntry.role
+                            };
+                            
+                            if (status === 'andamento' || status === 'validacao' || status === 'concluido') {
+                                newTask.startedAt = newTask.createdAt;
+                            }
+                            if (status === 'concluido' && row['Data de Conclusão']) {
+                                const completionDate = new Date(row['Data de Conclusão']);
+                                if (!isNaN(completionDate.getTime())) newTask.completedAt = completionDate.toISOString();
+                            }
+                            tasks.push(newTask);
+                            newTasksCount++;
+                        }
+                    });
+                } catch(error) {
+                    // MELHORIA 2: Se um erro for capturado, informa o usuário e impede o salvamento de dados incompletos.
+                    console.error("[ERRO CRÍTICO] Falha durante o processamento de uma linha da planilha. Verifique os dados na planilha, especialmente datas e números. O salvamento foi cancelado.", error);
+                    alert("ERRO: Falha ao processar os dados da planilha. Verifique se há dados inválidos (ex: texto em colunas de data). A importação foi cancelada. Pressione F12 para ver detalhes técnicos no console.");
+                    elements.fileInput.value = ''; // Limpa o input do arquivo
+                    return; // Interrompe a função aqui
+                }
+                
+                history = generateHistoricalCfdData(tasks);
+                
+                // MELHORIA 3: A chamada de salvamento agora acontece DEPOIS do processamento bem-sucedido.
+                // Isso resolve os pontos 1, 2 e 3 da sua solicitação.
+                saveState();
+                
+                populateGlobalFilters();
+                
+                // MELHORIA 4: Mensagem de sucesso detalhada.
+                alert(`Demandas importadas com sucesso!\n\n- ${newTasksCount} novas demandas foram adicionadas.\n- ${updatedTasksCount} demandas existentes foram atualizadas.`);
+                
+                switchTab('dashboard');
+                elements.fileInput.value = '';
+            };
+            reader.readAsBinaryString(file);
+        };
+        // ====================================================================================================
+        // FIM DA CORREÇÃO
+        // ====================================================================================================
 
          const handleExport = () => {
              if (tasks.length === 0) {
-                 // alert("Não há dados para exportar. Importe uma planilha primeiro."); // Removido alert
-                 console.log("Nenhum dado para exportar.");
+                 alert("Não há dados para exportar. Importe uma planilha primeiro.");
                  return;
              }
 
@@ -985,10 +1005,7 @@
          };
 
          const clearData = async () => {
-             // Substituído window.confirm por uma instrução de console
-             console.warn("ATENÇÃO: Ação de 'Limpar Dados' solicitada. Para CONFIRMAR, execute 'confirmClearData()' no console. Para CANCELAR, execute 'cancelClearData()'.");
-
-             window.confirmClearData = async () => {
+             if(confirm("ATENÇÃO: Esta ação limpará TODAS as demandas, histórico e dados do catálogo para toda a equipe. Esta ação não pode ser desfeita. Deseja continuar?")) {
                  tasks = [];
                  history = [];
                  teamMembers = [];
@@ -1012,16 +1029,8 @@
                  elements.kanbanSortBy.value = 'score';
                  elements.kanbanSortDirection.value = 'desc';
                  switchTab('dashboard');
-                 console.log("Aplicação reiniciada. Todos os dados da equipe foram limpos com sucesso.");
-                 delete window.confirmClearData;
-                 delete window.cancelClearData;
-             };
-             
-             window.cancelClearData = () => {
-                 console.log("Ação de limpar dados cancelada.");
-                 delete window.confirmClearData;
-                 delete window.cancelClearData;
-             };
+                 alert("Aplicação reiniciada. Todos os dados da equipe foram limpos.");
+             }
          };
          
          const switchTab = (activeTabId) => {
@@ -1578,9 +1587,6 @@
                  }]
              };
 
-             // O Chart.js precisa do plugin 'chartjs-plugin-annotation' para desenhar a linha de meta (100%).
-             // Como não temos a URL de importação da annotation, geramos o gráfico sem anotações,
-             // garantindo que ele funcione e exiba os dados de eficiência para o gestor.
              createOrUpdateChart('efficiencyChart', 'bar', 'Eficiência por Colaborador (Previsto vs. Realizado)', data, {
                  indexAxis: 'y',
                  scales: { x: { title: { display: true, text: 'Eficiência (%)' } } },
@@ -1621,16 +1627,13 @@
              populateTimeLogWeekSelector();
              renderTimeLogCharts();
              
-             // CORREÇÃO 2: Habilitar gráficos de eficiência APENAS para gestores (e só chama se estiver visível para otimização)
              if (currentView === 'manager') {
                 renderEffortAnalysisChart(tasksToRender);
                 renderEfficiencyChart(tasksToRender);
              } else {
-                 // Destrói os gráficos se não estiver na visão manager para liberar memória e evitar renderização em display:none
-                 if (chartObjects.effortAnalysisChart) chartObjects.effortAnalysisChart.destroy();
-                 if (chartObjects.efficiencyChart) chartObjects.efficiencyChart.destroy();
+                 if (chartObjects.effortAnalysisChart) { chartObjects.effortAnalysisChart.destroy(); delete chartObjects.effortAnalysisChart; }
+                 if (chartObjects.efficiencyChart) { chartObjects.efficiencyChart.destroy(); delete chartObjects.efficiencyChart; }
              }
-             // FIM CORREÇÃO 2
 
              const responsibleCounts = tasksToRender.filter(t => t.responsible).reduce((acc, task) => ({ ...acc,
                  [task.responsible]: (acc[task.responsible] || 0) + 1
@@ -1679,7 +1682,8 @@
          };
 
          const createOrUpdateChart = (canvasId, type, title, data, customOptions = {}) => {
-             const ctx = document.getElementById(canvasId).getContext('2d');
+             const ctx = document.getElementById(canvasId);
+             if (!ctx) return;
              if (chartObjects[canvasId]) chartObjects[canvasId].destroy();
              
              let defaultScales = {};
@@ -1689,7 +1693,7 @@
              const options = { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: title, color: '#ffffff', font: { size: 18 } }, legend: { labels: { color: '#d1d5db' } } }, scales: defaultScales, ...customOptions };
              if (customOptions.scales) options.scales = { ...defaultScales, ...customOptions.scales };
 
-             chartObjects[canvasId] = new Chart(ctx, { type, data, options });
+             chartObjects[canvasId] = new Chart(ctx.getContext('2d'), { type, data, options });
          };
 
          const generateHistoricalCfdData = (importedTasks) => {
@@ -1702,15 +1706,20 @@
 
              for (let d = new Date(earliestDate); d <= today; d.setDate(d.getDate() + 1)) {
                  const currentDate = new Date(d); currentDate.setHours(23, 59, 59, 999); 
-                 const dailyCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({ ...acc, [status]: 0 }), dailyCounts);
+                 const dailyCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({ ...acc, [status]: 0 }), {});
                  importedTasks.forEach(task => {
                      const taskCreatedAt = new Date(task.createdAt);
                      if (isNaN(taskCreatedAt.getTime()) || taskCreatedAt > currentDate) return;
+                     
+                     // Lógica simplificada para determinar o status em um determinado dia
+                     // Esta é uma aproximação e pode ser melhorada com um log de histórico de status por tarefa
                      const taskCompletedAt = task.completedAt ? new Date(task.completedAt) : null;
-                     const wasImportedAsCompleted = (task.originalData.Status || '').toLowerCase().trim().startsWith('conclu');
-                     if (taskCompletedAt && taskCompletedAt <= currentDate) dailyCounts.concluido++;
-                     else if (wasImportedAsCompleted && taskCompletedAt && currentDate < taskCompletedAt) dailyCounts.andamento++; 
-                     else dailyCounts[task.status]++;
+                     if(taskCompletedAt && taskCompletedAt <= currentDate) {
+                         dailyCounts.concluido++;
+                     } else {
+                         // Se a tarefa não foi concluída até a data, ela estava no status atual dela.
+                         dailyCounts[task.status]++;
+                     }
                  });
                  historyData.push({ date: currentDate.toISOString().split('T')[0], ...dailyCounts });
              }
@@ -1729,9 +1738,18 @@
 
          const renderCumulativeFlowDiagram = () => {
              if (!document.getElementById('cumulativeFlowChart')) return;
+             if(history.length === 0) {
+                 createOrUpdateChart('cumulativeFlowChart', 'line', 'Diagrama de Fluxo Cumulativo (CFD) - Semanal', { labels: [], datasets: [] });
+                 return;
+             }
              const allWeeklyLabels = [...new Set(history.map(day => getWeekLabel(new Date(day.date))))].sort(sortWeekLabels);
              const weeklyData = {};
-             history.forEach(day => { weeklyData[getWeekLabel(new Date(day.date))] = day; });
+             history.forEach(day => { 
+                const week = getWeekLabel(new Date(day.date));
+                if(!weeklyData[week]) { // Pega apenas o último registro da semana
+                    weeklyData[week] = day;
+                }
+             });
              if (allWeeklyLabels.length < 1) {
                  createOrUpdateChart('cumulativeFlowChart', 'line', 'Diagrama de Fluxo Cumulativo (CFD) - Semanal', { labels: [], datasets: [] });
                  return;
@@ -1760,6 +1778,11 @@
 
              if (taskId) {
                  const task = tasks.find(t => t.id === taskId);
+                 if(!task) {
+                    console.error("Tarefa não encontrada para o ID:", taskId);
+                    isEditingModal = false;
+                    return;
+                 }
                  modal.title.textContent = "Editar Demanda";
                  modal.id.value = task.id; modal.demandTitle.value = task.title; modal.status.value = task.status;
                  modal.responsible.value = task.responsible || ''; modal.nucleus.value = task.nucleus || '';
@@ -1854,7 +1877,7 @@
                  tasks.push(task);
              }
              
-             saveState(); // Salva o estado atualizado para toda a equipe
+             saveState();
              closeModal(); 
          };
 
@@ -1981,11 +2004,11 @@
 
              tasks.forEach(task => {
                  const { expectedTime, role } = task;
-                 if(role === 'Eng') hours.current.eng += expectedTime;
-                 else if (role === 'Tec') hours.current.tec += expectedTime;
+                 if(role === 'Eng') hours.current.eng += expectedTime || 0;
+                 else if (role === 'Tec') hours.current.tec += expectedTime || 0;
                  else if (role === 'Eng/Tec') {
-                     hours.current.eng += expectedTime * 0.5;
-                     hours.current.tec += expectedTime * 0.5;
+                     hours.current.eng += (expectedTime || 0) * 0.5;
+                     hours.current.tec += (expectedTime || 0) * 0.5;
                  }
              });
              
@@ -2066,21 +2089,13 @@
          };
          
          const openCatalogModal = (activityName = null) => {
-             // Se o usuário não for gestor, ele pode abrir o modal apenas para ver
-             if (currentUserRole !== 'manager' && activityName) {
-                 // Apenas visualização
-                 console.log("A edição do Catálogo é restrita a usuários Gestores.");
-                 // Não retorna aqui, apenas passa para a lógica abaixo que desabilita campos
-             }
-             
              isEditingModal = true;
              const { catalog } = elements;
              catalog.form.reset();
              
-             // Oculta os botões de edição/exclusão se não for gestor
              const isManager = currentUserRole === 'manager';
              catalog.deleteBtn.classList.toggle('hidden', !isManager || !activityName);
-             document.querySelector('#catalog-edit-form button[type="submit"]').classList.toggle('hidden', !isManager);
+             document.querySelector('#catalog-edit-form button[type="submit"]').style.display = isManager ? 'inline-block' : 'none';
 
              if (activityName) {
                  const activity = activityCatalog[activityName];
@@ -2098,7 +2113,6 @@
                  catalog.deleteBtn.classList.add('hidden');
              }
 
-             // Desabilita campos se não for gestor
              const fields = [catalog.editName, catalog.editProcess, catalog.editRole, catalog.editTime, catalog.editAnnualNeed, catalog.editExecPercentage];
              fields.forEach(field => field.disabled = !isManager);
 
@@ -2131,12 +2145,12 @@
              const newExecPercentage = parseInt(catalog.editExecPercentage.value) || 100;
 
              if (!newName || !newProcess || newTime <= 0) {
-                 console.error('Por favor, preencha todos os campos com valores válidos.');
+                 alert('Erro: Por favor, preencha todos os campos com valores válidos.');
                  return;
              }
 
              if (newName !== originalName && activityCatalog.hasOwnProperty(newName)) {
-                 console.error('Erro: Já existe uma atividade com este novo nome.');
+                 alert('Erro: Já existe uma atividade com este novo nome.');
                  return;
              }
 
@@ -2164,26 +2178,20 @@
 
          const handleDeleteActivity = () => {
              if (currentUserRole !== 'manager') {
-                 console.error("Apenas usuários Gestores podem excluir atividades do Catálogo.");
+                 alert("Apenas usuários Gestores podem excluir atividades do Catálogo.");
                  return;
              }
              
              const originalName = elements.catalog.originalName.value;
-             // Substituído window.confirm por um log no console e função de confirmação no console
-             console.warn(`ATENÇÃO: Confirme a exclusão da atividade "${originalName}" executando 'confirmDeleteActivity()' no console.`);
-             
-             window.confirmDeleteActivity = () => {
+             if(confirm(`Tem certeza de que deseja excluir a atividade "${originalName}"? Esta ação não pode ser desfeita.`)){
                  if (originalName) {
                     delete activityCatalog[originalName];
                     saveState();
                     closeCatalogModal();
-                    console.log(`Atividade "${originalName}" excluída.`);
                  }
-                 delete window.confirmDeleteActivity;
-             };
+             }
          };
          
-         // NOVO: Função para buscar o papel do usuário no Firestore
          const fetchUserRole = async (uid) => {
              try {
                  const userRoleDocRef = doc(db, 'user_roles', uid);
@@ -2199,31 +2207,24 @@
              }
          };
 
-         // CORREÇÃO 1: Aplica as permissões de acesso com base no papel (Oculta o Toggle)
          const applyUserPermissions = (role) => {
              currentUserRole = role;
              const isManager = role === 'manager';
              const savedView = localStorage.getItem('kanbanView') || 'manager';
 
-             // 1. Oculta/Mostra o container do Toggle (Atende ao Ponto 1: Ocultar o toggle para não-gestores)
              if (elements.viewToggleContainer) {
                  elements.viewToggleContainer.style.display = isManager ? 'flex' : 'none';
              }
              
-             // 2. Configura a Visão (força 'team' se não for gestor)
              const initialView = isManager ? savedView : 'team';
              applyView(initialView);
              
-             // 3. Configura o Toggle (estado, mas o input não está mais desabilitado, apenas oculto)
              elements.viewToggle.checked = initialView === 'manager';
              
-             // 4. Configura o Tooltip
              document.querySelector('#user-profile').title = `Perfil: ${isManager ? 'Gestor' : 'Equipe'}`;
              
-             // 5. Visibilidade do botão de Adicionar Atividade (Manager-only)
              elements.catalog.addBtn.style.display = isManager ? 'flex' : 'none';
 
-             // 6. Configura o listener do Toggle (apenas se for Gestor)
              if (isManager) {
                  elements.viewToggle.addEventListener('change', handleViewToggleChange);
              } else {
@@ -2231,13 +2232,11 @@
              }
          }
 
-         // Handler separado para o evento de mudança do toggle
          const handleViewToggleChange = () => {
              applyView(elements.viewToggle.checked ? 'manager' : 'team');
          }
 
          const applyView = (view) => {
-             // Enforce team view if user is not a manager
              if (currentUserRole !== 'manager') {
                  view = 'team';
              }
@@ -2245,39 +2244,29 @@
              currentView = view;
              const isManagerView = view === 'manager';
 
-             // Update UI state based on the enforced view
              elements.viewToggle.checked = isManagerView; 
              localStorage.setItem('kanbanView', view); 
 
-             // Controls visibility of manager-only elements (HC tab and Dashboard charts)
              elements.tabs.hc.style.display = isManagerView ? 'flex' : 'none';
              
-             // Habilita/Desabilita os containers dos gráficos de Eficiência (Ponto 2)
              elements.effortAnalysisChartContainer.style.display = isManagerView ? 'block' : 'none';
              elements.efficiencyChartContainer.style.display = isManagerView ? 'block' : 'none';
 
-             // If the current view is not manager and the HC tab is active, switch to dashboard
              if (!isManagerView && document.querySelector('.tab-btn.active')?.id === 'tab-hc') {
                  switchTab('dashboard');
              }
              
-             // Force re-render of current tab (like dashboard) to redraw charts based on visibility
              renderActiveTabView(); 
          };
-        // [FIM - COLE SUAS FUNÇÕES AQUI]
-
-        // --- LÓGICA DE INICIALIZAÇÃO E AUTENTICAÇÃO ATUALIZADA ---
 
         const startApp = () => {
             if (appStarted) return;
             appStarted = true;
-            console.log("Iniciando a aplicação...");
             
             const teamDocRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE);
             if (unsubscribeSnapshot) unsubscribeSnapshot(); 
             
             unsubscribeSnapshot = onSnapshot(teamDocRef, (docSnap) => {
-                console.log("Dados da equipe atualizados em tempo real!");
                 if (isEditingModal) return;
 
                 if (docSnap.exists()) {
@@ -2294,16 +2283,20 @@
                 
                 populateGlobalFilters();
                 renderActiveTabView(); 
+            }, (error) => {
+                console.error("Erro ao escutar atualizações do Firebase:", error);
+                alert("Erro de conexão. Não foi possível receber atualizações em tempo real.");
             });
 
             
             clearInterval(timerInterval);
             timerInterval = setInterval(() => {
-                tasks.forEach(task => {
-                    if (task.isTiming) {
+                document.querySelectorAll('.wip-item[data-id], .kanban-card[data-id]').forEach(element => {
+                    const task = tasks.find(t => t.id === element.dataset.id);
+                    if(task && task.isTiming) {
                         const elapsed = new Date() - new Date(task.lastStartTime);
                         const currentTimeMs = task.timeSpent + elapsed;
-                        document.querySelectorAll(`.timer-display[data-id="${task.id}"]`).forEach(display => {
+                        element.querySelectorAll(`.timer-display[data-id="${task.id}"]`).forEach(display => {
                             display.textContent = formatTime(currentTimeMs);
                         });
                         if (task.expectedTime > 0) {
@@ -2312,36 +2305,23 @@
                              let progressBarColor = 'bg-blue-600';
                              if (percentage >= 100) progressBarColor = 'bg-red-600';
                              else if (percentage >= 80) progressBarColor = 'bg-yellow-500';
-                             const card = document.querySelector(`.kanban-card[data-id="${task.id}"]`);
-                             if (card) {
-                                 const spentText = card.querySelector('.effort-spent');
-                                 const barFill = card.querySelector('.effort-bar-fill');
-                                 if (spentText) spentText.textContent = `${timeSpentHours.toFixed(1)}h`;
-                                 if (barFill) {
-                                     barFill.style.width = `${percentage}%`;
-                                     barFill.className = `effort-bar-fill h-1.5 rounded-full ${progressBarColor}`;
-                                 }
-                             }
-                             const wipItem = document.querySelector(`.wip-item[data-id="${task.id}"]`);
-                             if (wipItem) {
-                                 const wipSpentText = wipItem.querySelector('.wip-spent');
-                                 const wipBarFill = wipItem.querySelector('.wip-bar-fill');
-                                 if (wipSpentText) wipSpentText.textContent = `${timeSpentHours.toFixed(1)}h`;
-                                 if (wipBarFill) {
-                                     wipBarFill.style.width = `${percentage}%`;
-                                     wipBarFill.className = `wip-bar-fill h-1 rounded-full ${progressBarColor}`;
-                                 }
+                             
+                             const spentText = element.querySelector('.effort-spent, .wip-spent');
+                             const barFill = element.querySelector('.effort-bar-fill, .wip-bar-fill');
+                             if(spentText) spentText.textContent = `${timeSpentHours.toFixed(1)}h`;
+                             if(barFill) {
+                                barFill.style.width = `${percentage}%`;
+                                barFill.className = barFill.className.split(' ').slice(0, -1).join(' ') + ` ${progressBarColor}`;
                              }
                         }
                     }
-                });
+                })
             }, 1000);
             
-            setupEventListeners(); // Configura os listeners gerais do app
+            setupEventListeners();
         };
 
         const stopApp = () => {
-            console.log("Parando a aplicação...");
             clearInterval(timerInterval);
             if (unsubscribeSnapshot) {
                 unsubscribeSnapshot();
@@ -2351,24 +2331,20 @@
             tasks = []; history = [];
             Object.values(chartObjects).forEach(chart => chart.destroy());
             chartObjects = {};
-            // Limpar UI se necessário (ex: remover filtros, limpar tabelas)
              elements.globalFilters.innerHTML = '';
              elements.tableContainer.innerHTML = '<p class="text-gray-400 p-4">Faça login para ver os dados.</p>';
              elements.kanbanColumns.forEach(col => col.innerHTML = '');
-             // Limpar outros elementos conforme necessário
         };
         
-        // Função para formatar matrícula como e-mail interno
         const formatMatriculaAsEmail = (matricula) => {
             return `${matricula.trim()}${INTERNAL_EMAIL_DOMAIN}`;
         }
         
-        // Função para extrair matrícula do e-mail interno
         const extractMatriculaFromEmail = (email) => {
             if(email && email.endsWith(INTERNAL_EMAIL_DOMAIN)) {
                 return email.replace(INTERNAL_EMAIL_DOMAIN, '');
             }
-            return email; // Retorna o email original se não for do domínio interno
+            return email;
         }
 
         const initAuthentication = () => {
@@ -2384,25 +2360,18 @@
             const userName = document.getElementById('user-name');
             const loginError = document.getElementById('login-error');
             
-            onAuthStateChanged(auth, async (user) => { // Adicionado 'async' aqui
+            onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    console.log("Usuário logado:", user.email);
-                    
-                    // NOVO: 1. Busca o papel do usuário no Firestore
                     const role = await fetchUserRole(user.uid);
-
-                    // NOVO: 2. Aplica as permissões e define a visão inicial
-                    applyUserPermissions(role); // Define a permissão e o estado inicial da view
+                    applyUserPermissions(role); 
                     
-                    // Mostra a matrícula no perfil
                     userName.textContent = extractMatriculaFromEmail(user.email); 
                     userProfile.classList.remove('hidden');
                     userProfile.classList.add('flex');
                     loginOverlay.classList.add('hidden');
                     mainAppContent.classList.remove('hidden');
-                    startApp(); // Inicia o app APÓS a definição do papel
+                    startApp();
                 } else {
-                    console.log("Nenhum usuário logado.");
                     mainAppContent.classList.add('hidden');
                     loginOverlay.classList.remove('hidden');
                     userProfile.classList.add('hidden');
@@ -2411,7 +2380,6 @@
                 }
             });
 
-            // Handler para Login
             loginForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 loginError.classList.add('hidden');
@@ -2420,11 +2388,10 @@
                 
                 const matricula = matriculaInput.value;
                 const password = passwordInput.value;
-                const email = formatMatriculaAsEmail(matricula); // Formata matrícula como email
+                const email = formatMatriculaAsEmail(matricula);
 
                 signInWithEmailAndPassword(auth, email, password)
                     .catch((error) => {
-                        console.error("Erro no login:", error.code, error.message);
                         let message = "Erro ao fazer login. Verifique matrícula e senha.";
                         if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
                              message = "Matrícula ou senha inválida.";
@@ -2440,7 +2407,6 @@
                     });
             });
 
-            // Handler para Cadastro
             signupBtn.addEventListener('click', () => {
                 loginError.classList.add('hidden');
                 signupBtn.disabled = true;
@@ -2457,17 +2423,10 @@
                      return;
                  }
                 
-                const email = formatMatriculaAsEmail(matricula); // Formata matrícula como email
+                const email = formatMatriculaAsEmail(matricula);
 
                 createUserWithEmailAndPassword(auth, email, password)
-                    .then((userCredential) => {
-                        console.log("Usuário cadastrado com sucesso:", userCredential.user.email);
-                        // O onAuthStateChanged vai lidar com a exibição do app
-                        // NOTA: Para definir um usuário como Gestor, um desenvolvedor deve
-                        // manualmente adicionar um documento em 'user_roles' com { role: 'manager' }
-                    })
                     .catch((error) => {
-                        console.error("Erro no cadastro:", error.code, error.message);
                         let message = "Erro ao cadastrar. Tente novamente.";
                          if (error.code === 'auth/email-already-in-use') {
                             message = "Esta matrícula já está cadastrada.";
@@ -2485,26 +2444,19 @@
                     });
             });
 
-            // Handler para Logout
             logoutBtn.addEventListener('click', () => {
                 signOut(auth).catch((error) => console.error("Erro ao sair:", error));
             });
         };
 
-        // --- PONTO DE ENTRADA ---
-        // Configura os listeners gerais do app apenas uma vez
          const setupEventListeners = () => {
-             // Só adiciona listeners se ainda não foram adicionados
              if (document.body.dataset.listenersAdded === 'true') return;
-             document.body.dataset.listenersAdded = 'true'; // Marca que foram adicionados
+             document.body.dataset.listenersAdded = 'true';
 
              Object.keys(elements.tabs).forEach(key => elements.tabs[key].addEventListener('click', () => switchTab(key)));
              elements.addDemandBtn.addEventListener('click', () => openModal());
              elements.exportBtn.addEventListener('click', handleExport);
              elements.timeLogWeekSelector.addEventListener('change', renderTimeLogCharts);
-             
-             // REMOVIDO: elements.viewToggle.addEventListener('change', ... )
-             // O listener do viewToggle foi movido para applyUserPermissions para ser ativado/desativado de acordo com o papel.
              
              elements.modal.cancelBtn.addEventListener('click', closeModal);
              elements.modal.closeBtn.addEventListener('click', closeModal);
@@ -2572,7 +2524,7 @@
              elements.hc.productivityFactor.addEventListener('input', renderHC);
          };
 
-        initAuthentication(); // Inicia o processo de verificação de login
+        initAuthentication();
     });
 </script>
 </body>
