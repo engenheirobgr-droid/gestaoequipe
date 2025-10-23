@@ -876,6 +876,13 @@
                         if (existingTask) {
                             existingTask.originalData = row;
                             existingTask.title = row.Título || existingTask.title;
+                            
+                            // ### INÍCIO DA CORREÇÃO SOLICITADA ###
+                            // Atualiza o responsável e o núcleo no objeto principal da tarefa
+                            existingTask.responsible = row['Atribuído a'] || existingTask.responsible;
+                            existingTask.nucleus = row['Núcleo'] || existingTask.nucleus;
+                            // ### FIM DA CORREÇÃO SOLICITADA ###
+
                             updatedTasksCount++;
                         } else {
                             const sheetStatus = (row.Status || '').toLowerCase().trim();
@@ -1297,7 +1304,8 @@
                              return `
                              <tr class="${isDuplicate ? 'bg-red-900/50' : ''}">
                                  ${allHeaders.map(h => {
-                                     const cellValue = task.originalData[h];
+                                     // Certifica que o valor da célula é pego de originalData
+                                     const cellValue = (task.originalData && task.originalData[h] !== undefined) ? task.originalData[h] : '';
                                      const formattedValue = dateColumns.includes(h) ? formatDate(cellValue) : (cellValue || '');
                                      return `<td class="${getCellClass(h)}">${formattedValue}</td>`;
                                  }).join('')}
@@ -1831,6 +1839,7 @@
              };
 
              if (task) {
+                 // Bloco de Edição (Ponto 1)
                  const oldStatus = task.status;
                  Object.assign(task, taskData);
 
@@ -1847,7 +1856,16 @@
                      task.status = 'backlog';
                  }
 
-                 Object.assign(task.originalData, { 'Título': task.title, 'Descrição': task.description, 'Atribuído a': task.responsible, 'Status': STATUS_TO_SHEET_MAP[task.status] || task.status });
+                 // ### INÍCIO DA MELHORIA 1: Garantir que 'Núcleo' seja salvo no originalData ###
+                 Object.assign(task.originalData, { 
+                     'Título': task.title, 
+                     'Descrição': task.description, 
+                     'Atribuído a': task.responsible, 
+                     'Núcleo': task.nucleus, // Adicionado aqui
+                     'Status': STATUS_TO_SHEET_MAP[task.status] || task.status 
+                 });
+                 // ### FIM DA MELHORIA 1 ###
+                 
                  if (task.demandType === 'problema') Object.assign(task.originalData, { 'Gravidade (GUT)': `Gravidade (${task.gut.g})`, 'Urgência (GUT)': `Urgência (${task.gut.u})`, 'Tendência (GUT)': `Tendência (${task.gut.t})` });
 
                  if (task.status !== 'concluido') {
@@ -1858,11 +1876,25 @@
                      task.originalData['Data de Conclusão'] = new Date(task.completedAt);
                  }
                  if (oldStatus !== 'andamento' && task.status === 'andamento' && !task.startedAt) task.startedAt = new Date().toISOString();
+             
              } else {
+                 // Bloco de Criação (Ponto 2)
+                 
+                 // ### INÍCIO DA MELHORIA 2: Gerar ID_REF para novas demandas ###
+                 const allIdRefs = tasks.map(t => parseInt(t.originalId, 10)).filter(id => !isNaN(id));
+                 const maxIdRef = allIdRefs.length > 0 ? Math.max(...allIdRefs) : 0;
+                 const newIdRef = Math.max(700000, maxIdRef + 1);
+                 // ### FIM DA MELHORIA 2 ###
+
                  task = {
-                     id: `manual-${Date.now()}`, createdAt: new Date().toISOString(), originalData: {}, ...taskData,
+                     id: `manual-${Date.now()}`,
+                     originalId: newIdRef, // Adicionado ID_REF
+                     createdAt: new Date().toISOString(),
+                     originalData: { 'ID_REF': newIdRef }, // Adicionado ID_REF ao originalData
+                     ...taskData,
                      timeSpent: 0, isTiming: false, lastStartTime: null, playCount: 0
                  };
+                 
                   if (task.demandType === 'problema') {
                      task.gut = { g: parseInt(modal.gut.g.value) || 0, u: parseInt(modal.gut.u.value) || 0, t: parseInt(modal.gut.t.value) || 0 };
                      task.scoreGUT = calculateGUT(false);
@@ -1874,6 +1906,24 @@
                  if (task.status === 'triagem' && hasScore) {
                      task.status = 'backlog';
                  }
+                 
+                 // ### INÍCIO DA MELHORIA 2: Popular originalData para novas demandas ###
+                 Object.assign(task.originalData, {
+                     'Título': task.title,
+                     'Descrição': task.description,
+                     'Atribuído a': task.responsible,
+                     'Núcleo': task.nucleus, // Adicionado Núcleo
+                     'Status': STATUS_TO_SHEET_MAP[task.status] || task.status
+                 });
+                 if (task.demandType === 'problema') {
+                     Object.assign(task.originalData, {
+                         'Gravidade (GUT)': `Gravidade (${task.gut.g})`,
+                         'Urgência (GUT)': `Urgência (${task.gut.u})`,
+                         'Tendência (GUT)': `Tendência (${task.gut.t})`
+                     });
+                 }
+                 // ### FIM DA MELHORIA 2 ###
+                 
                  tasks.push(task);
              }
              
