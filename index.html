@@ -14,10 +14,20 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
-        .kanban-column { min-height: 200px; }
+        /* ### INÍCIO DA CORREÇÃO 3: Mantém altura limitada, mas OCULTA scroll vertical da coluna */
+        .kanban-column { 
+            min-height: 200px; 
+            max-height: calc(100vh - 360px); /* 100vh - (header + tabs + filters + paddings) */
+            overflow-y: auto; /* Mantém o comportamento de scroll */
+        }
+        /* Aplica a classe para esconder a barra de rolagem */
+        .kanban-column::-webkit-scrollbar { display: none; }
+        .kanban-column { -ms-overflow-style: none; scrollbar-width: none; }
+        /* ### FIM DA CORREÇÃO 3 */
         .kanban-card { cursor: grab; transition: background-color 0.2s, box-shadow 0.2s; }
         .kanban-card:active { cursor: grabbing; }
         .dragging { opacity: 0.5; transform: rotate(3deg); }
+        /* Classe genérica para esconder scrollbars */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .tab-btn.active { border-bottom-color: #3b82f6; color: #3b82f6; }
@@ -375,13 +385,15 @@
                         <option value="asc">Menor para Menor</option>
                     </select>
                 </div>
-                <main id="kanban-board" class="flex space-x-4 overflow-x-auto no-scrollbar pb-4">
-                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-gray-500 pb-2 flex justify-center items-center">Caixa de Entrada<span id="count-triagem" class="ml-2 text-sm font-mono bg-gray-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-triagem" class="kanban-column space-y-3" data-status="triagem"></div></div>
-                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-yellow-500 pb-2 flex justify-center items-center">Backlog Priorizado<span id="count-backlog" class="ml-2 text-sm font-mono bg-yellow-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-backlog" class="kanban-column space-y-3" data-status="backlog"></div></div>
-                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-blue-500 pb-2 flex justify-center items-center">A Fazer<span id="count-fazer" class="ml-2 text-sm font-mono bg-blue-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-fazer" class="kanban-column space-y-3" data-status="fazer"></div></div>
-                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-purple-500 pb-2 flex justify-center items-center">Em Andamento<span id="count-andamento" class="ml-2 text-sm font-mono bg-purple-600 rounded-full px-2 py-0.5">0/5</span></h2><div id="column-andamento" class="kanban-column space-y-3" data-status="andamento"></div></div>
-                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-indigo-500 pb-2 flex justify-center items-center">Em Validação<span id="count-validacao" class="ml-2 text-sm font-mono bg-indigo-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-validacao" class="kanban-column space-y-3" data-status="validacao"></div></div>
-                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-green-500 pb-2 flex justify-center items-center">Concluído<span id="count-concluido" class="ml-2 text-sm font-mono bg-green-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-concluido" class="kanban-column space-y-3" data-status="concluido"></div></div>
+                <!-- Kanban board: mantém a barra horizontal visível -->
+                <main id="kanban-board" class="flex space-x-4 overflow-x-auto pb-4">
+                     <!-- Colunas do Kanban: Adiciona a classe no-scrollbar para ocultar scroll vertical -->
+                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-gray-500 pb-2 flex justify-center items-center">Caixa de Entrada<span id="count-triagem" class="ml-2 text-sm font-mono bg-gray-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-triagem" class="kanban-column no-scrollbar space-y-3" data-status="triagem"></div></div>
+                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-yellow-500 pb-2 flex justify-center items-center">Backlog Priorizado<span id="count-backlog" class="ml-2 text-sm font-mono bg-yellow-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-backlog" class="kanban-column no-scrollbar space-y-3" data-status="backlog"></div></div>
+                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-blue-500 pb-2 flex justify-center items-center">A Fazer<span id="count-fazer" class="ml-2 text-sm font-mono bg-blue-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-fazer" class="kanban-column no-scrollbar space-y-3" data-status="fazer"></div></div>
+                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-purple-500 pb-2 flex justify-center items-center">Em Andamento<span id="count-andamento" class="ml-2 text-sm font-mono bg-purple-600 rounded-full px-2 py-0.5">0/5</span></h2><div id="column-andamento" class="kanban-column no-scrollbar space-y-3" data-status="andamento"></div></div>
+                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-indigo-500 pb-2 flex justify-center items-center">Em Validação<span id="count-validacao" class="ml-2 text-sm font-mono bg-indigo-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-validacao" class="kanban-column no-scrollbar space-y-3" data-status="validacao"></div></div>
+                     <div class="bg-gray-800 rounded-lg p-3 w-80 flex-shrink-0"><h2 class="text-lg font-bold mb-4 text-center border-b-2 border-green-500 pb-2 flex justify-center items-center">Concluído<span id="count-concluido" class="ml-2 text-sm font-mono bg-green-600 rounded-full px-2 py-0.5">0</span></h2><div id="column-concluido" class="kanban-column no-scrollbar space-y-3" data-status="concluido"></div></div>
                  </main>
              </div>
          </div>
@@ -437,8 +449,8 @@
     </div>
 
     <!-- Modal para Adicionar/Editar Demanda -->
+    <!-- Adiciona a classe no-scrollbar ao modal -->
     <div id="demand-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-50">
-        <!-- Conteúdo Modal Demanda -->
         <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-screen overflow-y-auto no-scrollbar relative">
              <form id="demand-form">
                  <input type="hidden" id="demand-id">
@@ -1049,6 +1061,16 @@
          };
 
          const populateGlobalFilters = () => {
+             // ### INÍCIO DA CORREÇÃO 1: Manter filtros ativos ###
+             // Salva os valores dos filtros atuais antes de limpar
+             const currentFilterValues = new Map();
+             document.querySelectorAll('.global-filter').forEach(f => {
+                 if (f.value) {
+                     currentFilterValues.set(f.dataset.filterKey, f.value);
+                 }
+             });
+             // ### FIM DA CORREÇÃO 1 ###
+
              const filtersContainer = elements.globalFilters;
              filtersContainer.innerHTML = '';
              
@@ -1084,6 +1106,16 @@
                  }
                  filtersContainer.appendChild(filterWrapper);
              });
+             
+             // ### INÍCIO DA CORREÇÃO 1: Reaplica os valores salvos ###
+             // Restaura os valores dos filtros após recriá-los
+             document.querySelectorAll('.global-filter').forEach(f => {
+                 const savedValue = currentFilterValues.get(f.dataset.filterKey);
+                 if (savedValue) {
+                     f.value = savedValue;
+                 }
+             });
+             // ### FIM DA CORREÇÃO 1 ###
          };
          
          const getFilteredTasks = () => {
@@ -2579,3 +2611,4 @@
 </script>
 </body>
 </html>
+
