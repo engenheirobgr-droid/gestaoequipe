@@ -2324,8 +2324,8 @@
                 if (alimentadorInfo) {
                     modal.municipio.value = alimentadorInfo.Município || '';
                     modal.utd.value = alimentadorInfo.UTD || '';
-                    modal.setor.value = feederInfo.Setor || '';
-                    modal.superintendencia.value = feederInfo.Superintendência || '';
+                    modal.setor.value = alimentadorInfo.Setor || '';
+                    modal.superintendencia.value = alimentadorInfo.Superintendência || '';
                 }
 
                  modal.completionDate.value = toDateTimeLocal(task.completedAt);
@@ -3411,14 +3411,14 @@
 
             elements.modal.feeder.addEventListener('change', (e) => {
                 const feederName = e.target.value;
-                const feederInfo = alimentadoresData.find(a => a.Alimentador === feederName);
+                const alimentadorInfo = alimentadoresData.find(a => a.Alimentador === feederName);
                 if (feederInfo) {
-                    elements.modal.municipio.value = feederInfo.Município || '';
-                    elements.modal.utd.value = feederInfo.UTD || '';
-                    elements.modal.setor.value = feederInfo.Setor || '';
-                    elements.modal.superintendencia.value = feederInfo.Superintendência || '';
+                    elements.modal.municipio.value = alimentadorInfo.Município || '';
+                    elements.modal.utd.value = alimentadorInfo.UTD || '';
+                    elements.modal.setor.value = alimentadorInfo.Setor || '';
+                    elements.modal.superintendencia.value = alimentadorInfo.Superintendência || '';
 
-                    const focal = feederInfo.Focal || '';
+                    const focal = alimentadorInfo.Focal || '';
                     if (focal && !teamMembers.includes(focal)) {
                         teamMembers.push(focal);
                         teamMembers.sort();
