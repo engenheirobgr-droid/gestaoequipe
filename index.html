@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF--8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quadro de Gestão de Demandas (Equipe)</title>
     <!-- As mesmas bibliotecas e estilos -->
@@ -1112,12 +1112,54 @@
                     const existingTask = existingTasksMap.get(id_ref);
 
                     if (existingTask) {
-                        Object.assign(existingTask.originalData, row);
-                        existingTask.title = row.Título || existingTask.title;
-                        existingTask.responsible = row['Atribuído a'] || existingTask.responsible;
-                        existingTask.nucleus = row['Núcleo'] || existingTask.nucleus;
+                        // INÍCIO DA LÓGICA DE ATUALIZAÇÃO MODIFICADA
                         updatedTasksCount++;
+
+                        // Regra de Segurança: Atualiza campos apenas se a planilha tiver um novo valor.
+                        // Isso impede que células vazias na planilha apaguem dados já preenchidos no app.
+                        if (row.Título) existingTask.title = row.Título;
+                        if (row.Descrição) existingTask.description = row.Descrição;
+                        if (row['Atribuído a']) existingTask.responsible = row['Atribuído a'];
+                        if (row['Núcleo']) existingTask.nucleus = row['Núcleo'];
+
+                        // Atualiza os dados originais (usados na tabela e exportação) com a mesma regra de segurança.
+                        // O Object.assign foi substituído por uma iteração para garantir a regra.
+                        Object.keys(row).forEach(key => {
+                            if (row[key] !== null && row[key] !== undefined && row[key] !== '') {
+                                existingTask.originalData[key] = row[key];
+                            }
+                        });
+                        
+                        // Atualiza e recalcula o Score GUT se os valores existirem na planilha
+                        const g = parseGUTValue(row['Gravidade (GUT)']);
+                        const u = parseGUTValue(row['Urgência (GUT)']);
+                        const t = parseGUTValue(row['Tendência (GUT)']);
+                        
+                        // Apenas recalcula se houver um valor GUT válido (G, U ou T > 0)
+                        if (g > 0 || u > 0 || t > 0) {
+                            existingTask.gut = { g, u, t };
+                            existingTask.scoreGUT = g * u * t;
+                            // Garante que o tipo de demanda seja 'problema' se estivermos importando um score GUT
+                            existingTask.demandType = 'problema'; 
+                        }
+
+                        // Regra de Segurança: O status do Kanban NÃO é alterado, exceto na condição especial abaixo.
+                        const sheetStatus = (row.Status || '').toLowerCase().trim();
+
+                        // EXCEÇÃO à Regra de Segurança: Força o status para 'Concluído'
+                        // Apenas se o status na planilha for 'concluído' E a data de conclusão estiver preenchida.
+                        if ((sheetStatus === 'concluído' || sheetStatus === 'concluída') && row['Data de Conclusão']) {
+                            const completionDate = new Date(row['Data de Conclusão']);
+                            if (!isNaN(completionDate.getTime())) {
+                                existingTask.status = 'concluido';
+                                existingTask.completedAt = completionDate.toISOString();
+                                existingTask.originalData['Data de Conclusão'] = completionDate;
+                            }
+                        }
+                        // FIM DA LÓGICA DE ATUALIZAÇÃO MODIFICADA
+
                     } else {
+                        // A lógica para criar NOVOS cards permanece inalterada.
                         const sheetStatus = (row.Status || '').toLowerCase().trim();
                         let status = statusMap[sheetStatus] || 'triagem';
                         const g = parseGUTValue(row['Gravidade (GUT)']);
@@ -1535,13 +1577,10 @@
                 ${responsibleSection}
             `;
             
-            // *** INÍCIO DA CORREÇÃO ***
-            // Adiciona o "ouvinte de clique" de volta ao título do card
             const titleElement = card.querySelector('.card-title-clickable');
             if (titleElement) {
                 titleElement.addEventListener('click', () => openModal(task.id));
             }
-            // *** FIM DA CORREÇÃO ***
 
             card.addEventListener('dragstart', (e) => { draggedTaskId = task.id; e.currentTarget.classList.add('dragging'); });
             card.addEventListener('dragend', (e) => e.currentTarget.classList.remove('dragging'));
@@ -1861,52 +1900,91 @@
              }).join('');
          };
 
-         const renderTimeEvolutionChart = (tasksToRender) => {
-             const completedTasks = tasksToRender.filter(t => t.completedAt && t.startedAt && t.createdAt);
-             if (history.length === 0) {
-                 createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', { labels: [], datasets: [] });
-                 return;
-             }
-             const allWeeklyLabels = [...new Set(history.map(day => getWeekLabel(new Date(day.date))))].sort(sortWeekLabels);
+        const renderTimeEvolutionChart = (tasksToRender) => {
+            if (tasksToRender.length === 0) {
+                createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', { labels: [], datasets: [] });
+                return;
+            }
 
-             const weeklyMetrics = {};
-             const msPerDay = 1000 * 60 * 60 * 24;
+            const validCreationDates = tasksToRender.map(t => new Date(t.createdAt)).filter(d => !isNaN(d.getTime()));
+            if (validCreationDates.length === 0) {
+                createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', { labels: [], datasets: [] });
+                return;
+            }
 
-             completedTasks.forEach(task => {
-                 const week = getWeekLabel(new Date(task.completedAt));
-                 if (!weeklyMetrics[week]) weeklyMetrics[week] = { leadTimes: [], cycleTimes: [], count: 0 };
-                 weeklyMetrics[week].leadTimes.push((new Date(task.completedAt) - new Date(task.createdAt)) / msPerDay);
-                 weeklyMetrics[week].cycleTimes.push((new Date(task.completedAt) - new Date(task.startedAt)) / msPerDay);
-                 weeklyMetrics[week].count++;
-             });
+            const earliestDate = new Date(Math.min(...validCreationDates));
+            const today = new Date();
+            const allWeeklyLabels = [];
+            const weekSet = new Set();
 
-             const avgLeadTimes = allWeeklyLabels.map(label => {
-                 const weekData = weeklyMetrics[label];
-                 if (!weekData || weekData.leadTimes.length === 0) return 0;
-                 return (weekData.leadTimes.reduce((a, b) => a + b, 0) / weekData.leadTimes.length).toFixed(1);
-             });
-             const avgCycleTimes = allWeeklyLabels.map(label => {
-                 const weekData = weeklyMetrics[label];
-                 if (!weekData || weekData.cycleTimes.length === 0) return 0;
-                 return (weekData.cycleTimes.reduce((a, b) => a + b, 0) / weekData.cycleTimes.length).toFixed(1);
-             });
-             const throughputData = allWeeklyLabels.map(label => weeklyMetrics[label] ? weeklyMetrics[label].count : 0);
+            for (let d = new Date(earliestDate); d <= today; d.setDate(d.getDate() + 1)) {
+                const weekLabel = getWeekLabel(d);
+                if (!weekSet.has(weekLabel)) {
+                    weekSet.add(weekLabel);
+                    allWeeklyLabels.push(weekLabel);
+                }
+            }
+            allWeeklyLabels.sort(sortWeekLabels);
 
-             const data = {
-                 labels: allWeeklyLabels,
-                 datasets: [
-                     { label: 'Vazão (itens)', data: throughputData, type: 'bar', backgroundColor: 'rgba(16, 185, 129, 0.5)', borderColor: 'rgba(16, 185, 129, 1)', yAxisID: 'y1', order: 2 },
-                     { label: 'Lead Time Médio (dias)', data: avgLeadTimes, borderColor: '#a78bfa', backgroundColor: '#a78bfa', tension: 0.2, type: 'line', yAxisID: 'y', order: 1, spanGaps: false },
-                     { label: 'Cycle Time Médio (dias)', data: avgCycleTimes, borderColor: '#60a5fa', backgroundColor: '#60a5fa', tension: 0.2, type: 'line', yAxisID: 'y', order: 0, spanGaps: false }
-                 ]
-             };
-             createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', data, {
-                 scales: {
-                     y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Dias', color: '#d1d5db' }, ticks: { color: '#d1d5db' } },
-                     y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Nº de Itens Concluídos', color: '#d1d5db' }, grid: { drawOnChartArea: false }, ticks: { color: '#d1d5db', stepSize: 1 } }
-                 }
-             });
-         };
+            const throughputTasks = tasksToRender.filter(t => t.completedAt);
+            const cycleTimeTasks = tasksToRender.filter(t => t.completedAt && t.startedAt);
+            const leadTimeTasks = tasksToRender.filter(t => t.completedAt && t.createdAt);
+
+            const weeklyMetrics = {};
+            const msPerDay = 1000 * 60 * 60 * 24;
+
+            allWeeklyLabels.forEach(label => {
+                weeklyMetrics[label] = { leadTimes: [], cycleTimes: [], count: 0 };
+            });
+
+            leadTimeTasks.forEach(task => {
+                const week = getWeekLabel(new Date(task.completedAt));
+                if (weeklyMetrics[week]) {
+                    weeklyMetrics[week].leadTimes.push((new Date(task.completedAt) - new Date(task.createdAt)) / msPerDay);
+                }
+            });
+
+            cycleTimeTasks.forEach(task => {
+                const week = getWeekLabel(new Date(task.completedAt));
+                if (weeklyMetrics[week]) {
+                    weeklyMetrics[week].cycleTimes.push((new Date(task.completedAt) - new Date(task.startedAt)) / msPerDay);
+                }
+            });
+
+            throughputTasks.forEach(task => {
+                const week = getWeekLabel(new Date(task.completedAt));
+                if (weeklyMetrics[week]) {
+                    weeklyMetrics[week].count++;
+                }
+            });
+
+            const avgLeadTimes = allWeeklyLabels.map(label => {
+                const weekData = weeklyMetrics[label];
+                if (!weekData || weekData.leadTimes.length === 0) return 0; // CORREÇÃO: Retorna 0 em vez de null
+                return (weekData.leadTimes.reduce((a, b) => a + b, 0) / weekData.leadTimes.length).toFixed(1);
+            });
+            const avgCycleTimes = allWeeklyLabels.map(label => {
+                const weekData = weeklyMetrics[label];
+                if (!weekData || weekData.cycleTimes.length === 0) return 0; // CORREÇÃO: Retorna 0 em vez de null
+                return (weekData.cycleTimes.reduce((a, b) => a + b, 0) / weekData.cycleTimes.length).toFixed(1);
+            });
+            const throughputData = allWeeklyLabels.map(label => weeklyMetrics[label] ? weeklyMetrics[label].count : 0);
+
+            const data = {
+                labels: allWeeklyLabels,
+                datasets: [
+                    { label: 'Vazão (itens)', data: throughputData, type: 'bar', backgroundColor: 'rgba(16, 185, 129, 0.5)', borderColor: 'rgba(16, 185, 129, 1)', yAxisID: 'y1', order: 2 },
+                    { label: 'Lead Time Médio (dias)', data: avgLeadTimes, borderColor: '#a78bfa', backgroundColor: '#a78bfa', tension: 0.2, type: 'line', yAxisID: 'y', order: 1, spanGaps: false }, // CORREÇÃO: spanGaps volta a ser false
+                    { label: 'Cycle Time Médio (dias)', data: avgCycleTimes, borderColor: '#60a5fa', backgroundColor: '#60a5fa', tension: 0.2, type: 'line', yAxisID: 'y', order: 0, spanGaps: false }  // CORREÇÃO: spanGaps volta a ser false
+                ]
+            };
+            createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', data, {
+                scales: {
+                    y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'Dias', color: '#d1d5db' }, ticks: { color: '#d1d5db' }, beginAtZero: true },
+                    y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Nº de Itens Concluídos', color: '#d1d5db' }, grid: { drawOnChartArea: false }, ticks: { color: '#d1d5db', stepSize: 1 }, beginAtZero: true }
+                }
+            });
+        };
 
          const populateTimeLogWeekSelector = () => {
              const selector = elements.timeLogWeekSelector;
@@ -2056,11 +2134,12 @@
                  elements.kpis.throughput.textContent = '-- itens';
              } else {
                  const msPerDay = 86400000;
+                 const leadTimeTasks = tasksToRender.filter(t => t.completedAt && t.createdAt);
                  let totalLeadTime = 0;
-                 tasksToRender.forEach(t => {
-                     if (t.createdAt) totalLeadTime += (t.completedAt ? new Date(t.completedAt) : new Date()) - new Date(t.createdAt);
+                 leadTimeTasks.forEach(t => {
+                     totalLeadTime += new Date(t.completedAt) - new Date(t.createdAt);
                  });
-                 elements.kpis.leadTime.textContent = `${(totalLeadTime / tasksToRender.length / msPerDay).toFixed(1)} dias`;
+                 elements.kpis.leadTime.textContent = `${leadTimeTasks.length > 0 ? (totalLeadTime / leadTimeTasks.length / msPerDay).toFixed(1) : '--'} dias`;
 
                  const startedAndCompletedTasks = tasksToRender.filter(t => t.startedAt && t.completedAt);
                  let totalCycleTime = 0;
@@ -2178,10 +2257,15 @@
          const updateHistory = () => {
              const today = new Date().toISOString().split('T')[0];
              const lastHistoryEntry = history.length > 0 ? history[history.length - 1] : null;
-             const dailyCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({...acc, [status]: tasks.filter(t => t.status === status).length }), {});
+             const dailyCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({ ...acc,
+                 [status]: tasks.filter(t => t.status === status).length
+             }), {});
 
-             if (lastHistoryEntry && lastHistoryEntry.date === today) history[history.length - 1] = { date: today, ...dailyCounts };
-             else if (!lastHistoryEntry || new Date(lastHistoryEntry.date) < new Date(today)) history.push({ date: today, ...dailyCounts });
+             if (lastHistoryEntry && lastHistoryEntry.date === today) {
+                 history[history.length - 1] = { date: today, ...dailyCounts };
+             } else if (!lastHistoryEntry || new Date(lastHistoryEntry.date) < new Date(today)) {
+                 history.push({ date: today, ...dailyCounts });
+             }
          };
 
          const renderCumulativeFlowDiagram = () => {
@@ -2500,6 +2584,7 @@
                  tasks.push(task);
              }
 
+             updateHistory();
              saveState().then(() => {
                 closeModal();
                 renderActiveTabView();
@@ -2567,6 +2652,7 @@
                 if (!task.startedAt) task.startedAt = subtask.lastStartTime;
 
                 task.lastActiveSubtaskId = subtaskId;
+                updateHistory(); 
                 saveState().then(() => {
                     if(isEditingModal && elements.modal.id.value === taskId) {
                        renderSubtasks(task);
@@ -2600,6 +2686,7 @@
                 }
                 task.lastActiveSubtaskId = subtaskId;
                 if (shouldSave) {
+                    updateHistory(); 
                     saveState().then(() => {
                         if(isEditingModal && elements.modal.id.value === taskId) {
                             renderSubtasks(task);
@@ -2630,6 +2717,7 @@
                 task.status = 'fazer';
                 task.originalData['Status'] = STATUS_TO_SHEET_MAP['fazer'];
                 updateTaskExpectedTime(task);
+                updateHistory(); 
                 saveState();
             }
         };
@@ -2673,6 +2761,7 @@
             newTask.originalData['Diagnóstico'] = '';
 
             tasks.push(newTask);
+            updateHistory(); 
             saveState();
 
             alert(`Card "${originalTask.title}" copiado com sucesso com o novo ID: ${newIdRef}`);
@@ -2689,6 +2778,7 @@
                 const taskIndex = tasks.findIndex(t => t.id === taskId);
                 if (taskIndex > -1) {
                     tasks.splice(taskIndex, 1);
+                    updateHistory(); 
                     saveState().then(() => {
                         closeModal();
                     });
@@ -3580,7 +3670,8 @@
                          }
 
                          if (newStatus === 'andamento' && !task.startedAt) task.startedAt = new Date().toISOString();
-
+                         
+                         updateHistory();
                          saveState().then(() => {
                             draggedTaskId = null;
                          });
