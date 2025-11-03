@@ -27,13 +27,12 @@
         .sort-indicator { display: inline-block; width: 1em; text-align: center; }
         .wip-limit-exceeded { color: #ef4444; font-weight: bold; }
         .tooltip-container { position: relative; display: inline-flex; align-items: center; }
-        /* INÍCIO MELHORIA: Estilo do Tooltip aprimorado */
         .tooltip {
             visibility: hidden;
             opacity: 0;
             transition: opacity 0.2s;
-            position: fixed; /* MUDADO para 'fixed' para não ser cortado pelo modal */
-            z-index: 60; /* Maior que o z-index do modal */
+            position: fixed;
+            z-index: 60;
             width: 350px;
             padding: 12px;
             font-size: 0.8rem;
@@ -45,10 +44,8 @@
             text-align: left;
             pointer-events: none;
         }
-        .tooltip strong { color: #a5b4fc; } /* indigo-300 */
-        .tooltip em { color: #9ca3af; } /* gray-400 */
-        /* A visibilidade agora é controlada via JS, não mais por hover no CSS */
-        /* FIM MELHORIA */
+        .tooltip strong { color: #a5b4fc; }
+        .tooltip em { color: #9ca3af; }
         .subtask-item.completed { text-decoration: line-through; color: #6b7280; }
         .subtask-item.completed .subtask-timer, .subtask-item.completed .subtask-controls button { display: none; }
         .circular-btn {
@@ -224,6 +221,12 @@
                      </svg>
                      <span>Head Count (HC)</span>
                  </button>
+<button id="tab-users" class="tab-btn py-4 px-1 border-b-2 border-transparent text-gray-400 hover:text-white transition flex items-center" style="display: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                    </svg>
+                    <span>Gestão de Usuários</span>
+                </button>
              </nav>
          </div>
          <div id="global-filters-panel" class="container mx-auto px-4 pt-4">
@@ -476,11 +479,48 @@
                     </main>
                 </div>
              </div>
+<div id="view-users" class="hidden">
+                <div class="bg-gray-800 rounded-lg p-6">
+                    <h2 class="text-2xl font-bold mb-6">Gerenciar Acessos de Usuários</h2>
+            
+                    <!-- Formulário para adicionar novo usuário -->
+                    <div class="bg-gray-700/50 p-4 rounded-lg mb-8">
+                        <h3 class="text-xl font-semibold mb-4">Adicionar Novo Usuário</h3>
+                        <form id="add-user-form" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <div>
+                                <label for="new-user-matricula" class="block text-sm font-medium text-gray-300 mb-1">Matrícula</label>
+                                <input type="text" id="new-user-matricula" required class="w-full p-2 rounded bg-gray-800 border border-gray-600">
+                            </div>
+                            <div>
+                                <label for="new-user-name" class="block text-sm font-medium text-gray-300 mb-1">Nome Completo</label>
+                                <input type="text" id="new-user-name" required class="w-full p-2 rounded bg-gray-800 border border-gray-600">
+                            </div>
+                            <div>
+                                <label for="new-user-role" class="block text-sm font-medium text-gray-300 mb-1">Perfil</label>
+                                <select id="new-user-role" class="w-full p-2 rounded bg-gray-800 border border-gray-600">
+                                    <option value="team">Equipe</option>
+                                    <option value="manager">Gerente</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="md:col-span-3 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Adicionar à Lista de Permissões</button>
+                        </form>
+                    </div>
+            
+                    <!-- Tabela de usuários permitidos -->
+                    <div>
+                        <h3 class="text-xl font-semibold mb-4">Usuários Permitidos</h3>
+                        <div id="allowed-users-table" class="overflow-auto text-sm max-h-[50vh] rounded-lg">
+                            <!-- A tabela será renderizada aqui pelo JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- FIM DA ALTERAÇÃO -->
          </div>
     </div> <!-- Fim de #main-app-content -->
 
 
-     <!-- Modal Edição Catálogo (inalterado) -->
+     <!-- Modal Edição Catálogo (inalterado na maior parte, exceto funcionalidade JS) -->
     <div id="catalog-edit-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-50">
         <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-lg">
              <form id="catalog-edit-form">
@@ -527,7 +567,7 @@
          </div>
     </div>
 
-    <!-- Modal de Demanda -->
+    <!-- Modal de Demanda (inalterado na maior parte, exceto funcionalidade JS) -->
     <div id="demand-modal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center z-50">
         <div class="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-6xl max-h-[95vh] overflow-y-auto no-scrollbar relative">
              <form id="demand-form">
@@ -756,33 +796,91 @@
         doc,
         getDoc,
         setDoc,
-        onSnapshot
+        onSnapshot,
+        collection,
+        updateDoc,
+        addDoc,
+        deleteDoc,
+        writeBatch,
+        getDocs,
+        query
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+    // Mantenha suas credenciais do Firebase
     const firebaseConfig = {
-  	apiKey: "AIzaSyAEMLI4Z6Pfy9gFHrpwMJsFYLsRcKVQ5bI",
-  	authDomain: "app-gestao-equipe.firebaseapp.com",
-  	projectId: "app-gestao-equipe",
-  	storageBucket: "app-gestao-equipe.firebasestorage.app",
-  	messagingSenderId: "646563677943",
-  	appId: "1:646563677943:web:070ecf18a4e78fbf8d75f2"
+  	    apiKey: "AIzaSyAEMLI4Z6Pfy9gFHrpwMJsFYLsRcKVQ5bI",
+        authDomain: "app-gestao-equipe.firebaseapp.com",
+        projectId: "app-gestao-equipe",
+        storageBucket: "app-gestao-equipe.firebasestorage.app",
+        messagingSenderId: "646563677943",
+        appId: "1:646563677943:web:070ecf18a4e78fbf8d75f2"
      };
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
     const ID_DA_EQUIPE = "equipe_engenharia_principal";
-    let unsubscribeSnapshot = null;
+
+    let unsubscribeTasks = null;
+    let unsubscribeCatalog = null;
+    let unsubscribeAlimentadores = null;
+    let unsubscribeTimeLog = null;
+    let unsubscribeAllowedUsers = null; // ADICIONADO AQUI
+
     let appStarted = false;
     const INTERNAL_EMAIL_DOMAIN = "@equipe.local";
     let currentUserRole = 'team';
     let currentUserMatricula = null;
 
+    const toValidDate = (value) => {
+        if (!value) return null;
+        if (value instanceof Date) return value;
+        if (typeof value.toDate === 'function') return value.toDate();
+        const date = new Date(value);
+        return isNaN(date.getTime()) ? null : date;
+    };
+
+    const parseSheetDate = (sheetDate) => {
+    if (!sheetDate) return null;
+    if (sheetDate instanceof Date) return isNaN(sheetDate.getTime()) ? null : sheetDate;
+    
+    if (typeof sheetDate === 'number') {
+        const date = new Date((sheetDate - 25569) * 86400 * 1000);
+        return isNaN(date.getTime()) ? null : date;
+    }
+
+    // << INÍCIO DA MELHORIA: Reconhecimento de data no formato DD/MM/AAAA >>
+    if (typeof sheetDate === 'string') {
+        // Tenta tratar o formato "DD/MM/AAAA" ou "DD/MM/YYYY" primeiro
+        const parts = sheetDate.split(' ')[0].split('/'); // Pega só a parte da data e divide
+        if (parts.length === 3) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10);
+            const year = parseInt(parts[2], 10);
+            // Validação básica para garantir que são números válidos
+            if (!isNaN(day) && !isNaN(month) && !isNaN(year) && year > 1000) {
+                // new Date() espera (Ano, Mês-1, Dia)
+                const date = new Date(year, month - 1, day);
+                if (!isNaN(date.getTime())) return date;
+            }
+        }
+    }
+    // << FIM DA MELHORIA >>
+
+    // Se não for formato brasileiro ou número, tenta o método padrão
+    const date = new Date(sheetDate);
+    return isNaN(date.getTime()) ? null : date;
+};
+    const sanitizeDocId = (id) => {
+        if (typeof id !== 'string') return '';
+        return id.replace(/\//g, '|'); // Substitui / por |
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
         const WIP_LIMIT = 5;
         let tasks = [];
-        let allHeaders = [];
         let history = [];
+        let allHeaders = [];
         let timeLog = [];
         let teamMembers = [];
         let planOptions = [];
@@ -800,66 +898,67 @@
         let currentView = 'manager';
         let isEditingModal = false;
 
+        // CORREÇÃO: Catálogo padrão atualizado com os dados da imagem.
         const defaultActivityCatalog = {
-            "Elaboração de OGs para novas obras em TAF (OLTC. BC e Reator)": { "time": 1.3, "process": "Tensão em regime permanente", "annualNeed": 200, "executionPercentage": 100, "role": "Eng" },
-             "Elaboração de OGs para RTs/BCs (plano 8.4) Revisão de OGS": { "time": 0.8, "process": "Tensão em regime permanente", "annualNeed": 402, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Indicação e cobrança de pontos para o RUA": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 150, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Indicação de prioridades de RTs/BCs": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
-             "Estudar reincidência de queimas de equipamento Acompanhamento, cobrança de RIME etc": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
-             "Controle de Fator de Potência PSU": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 24, "executionPercentage": 100, "role": "Eng" },
-             "Analise de instalação de RT e melhores práticas": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
-             "Realocação de equipamento e estudo para novos pontos de instalação": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 88, "executionPercentage": 100, "role": "Eng" },
-             "Validação da memória de massa após aplicação da OG": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 402, "executionPercentage": 100, "role": "Tec" },
-             "Diagnóstico de qualidade do produto": { "time": 2.6, "process": "Gestão de Qualidade do produto", "annualNeed": 812, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Suporte técnico para equipes de campo": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 132, "executionPercentage": 100, "role": "Tec" },
-             "Configuração e Gestão de Qualimetro": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 36, "executionPercentage": 100, "role": "Tec" },
-             "Gestão e acompanhamento de ações de mitigação": { "time": 4, "process": "Gestão de Qualidade do produto", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Visita à clientes": { "time": 20, "process": "Gestão de Qualidade do produto", "annualNeed": 30, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Reunião com Clientes": { "time": 0.8, "process": "Gestão de Qualidade do produto", "annualNeed": 144, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Controle e gestão das medições permanentes": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 44, "executionPercentage": 100, "role": "Tec" },
-             "Elaboração de relatório com diagnóstico de qualidade": { "time": 1.5, "process": "Gestão de Qualidade do produto", "annualNeed": 700, "executionPercentage": 100, "role": "Eng" },
-             "Planos especiais para clientes (indústrias, oeste, etc.)": { "time": 0.5, "process": "Gestão de Qualidade do produto", "annualNeed": 1300, "executionPercentage": 100, "role": "Eng" },
-             "Atualização do Carregamento de AL, Trafos e LT": { "time": 2, "process": "Gestão de Qualidade do produto", "annualNeed": 12, "executionPercentage": 100, "role": "Tec" },
-             "Diagnóstico para SHD": { "time": 2.6, "process": "Gestão de Qualidade do produto", "annualNeed": 100, "executionPercentage": 100, "role": "Eng" },
-             "Análise e otimização dos alimentadores envolvidos nos planos especiais": { "time": 4, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 348, "executionPercentage": 100, "role": "Eng" },
-             "Ressaca dos planos": { "time": 16, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 3, "executionPercentage": 100, "role": "Eng" },
-             "Visita à região": { "time": 20, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 30, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Análise e otimização dos Trafos envolvidos nos planos especiais": { "time": 1, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 90, "executionPercentage": 100, "role": "Eng" },
-             "Análise e otimização de LDs envolvidos nos planos especiais": { "time": 1, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 50, "executionPercentage": 100, "role": "Eng" },
-             "Gestão e acompanhamento do plano de ação": { "time": 4, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 112, "executionPercentage": 100, "role": "Eng" },
-             "Padronizar analise e processos": { "time": 8, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
-             "Reuniões de supervisão": { "time": 16, "process": "Processos", "annualNeed": 88, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Reunião de equipe": { "time": 16, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Reunião Gerencial (Dese etc.)": { "time": 4, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Workshop Super e Gerencia": { "time": 32, "process": "Processos", "annualNeed": 5, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Criar fluxo dos processos": { "time": 16, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Treinamento/Workshop/benchmarking": { "time": 32, "process": "Processos", "annualNeed": 5, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Congresso e Seminários": { "time": 24, "process": "Processos", "annualNeed": 8, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Processos de Inovação (Inovar)": { "time": 10, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Analise de contigência N-1 (quadrimestral)": { "time": 8, "process": "Quadrimestral", "annualNeed": 36, "executionPercentage": 100, "role": "Eng" },
-             "Elaboração de Relatório Quadrimestral": { "time": 12, "process": "Quadrimestral", "annualNeed": 36, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Pontos de SEP": { "time": 0.5, "process": "Quadrimestral", "annualNeed": 24, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Manutenção de Deck": { "time": 2, "process": "Quadrimestral", "annualNeed": 24, "executionPercentage": 100, "role": "Eng/Tec" },
-             "Criação do Deck": { "time": 16, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
-             "ERAC": { "time": 1, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
-             "Atendimento a Inequações ONS": { "time": 4, "process": "Quadrimestral", "annualNeed": 6, "executionPercentage": 100, "role": "Eng" },
-             "Indicação de MUST em contingència": { "time": 1, "process": "Quadrimestral", "annualNeed": 48, "executionPercentage": 100, "role": "Eng" },
-             "Suporte para Análise de RCA": { "time": 1, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
-             "Planejar o Recurso para o próximo ano": { "time": 24, "process": "Plano 8.4", "annualNeed": 1, "executionPercentage": 100, "role": "Eng" },
-             "Acompanhar a utilização do recurso no ano corrente": { "time": 2, "process": "Plano 8.4", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
-             "Priorizar aplicação do recurso para demandas não planejadas": { "time": 1.5, "process": "Plano 8.4", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
-             "Gestão dos entrantes judiciais": { "time": 0.33, "process": "VNT", "annualNeed": 40, "executionPercentage": 100, "role": "Eng" },
-             "Elaboração da carteira de medição": { "time": 0.66, "process": "VNT", "annualNeed": 48, "executionPercentage": 100, "role": "Tec" },
-             "Lançamento das medições no SRT": { "time": 0.13, "process": "VNT", "annualNeed": 2850, "executionPercentage": 100, "role": "Tec" },
-             "Analise comp comercial": { "time": 0.33, "process": "VNT", "annualNeed": 2850, "executionPercentage": 100, "role": "Eng" },
-             "Acompanhamento ANEEL/Ouvidoria": { "time": 1.33, "process": "VNT", "annualNeed": 210, "executionPercentage": 100, "role": "Tec" },
-             "Gerar Nota de Obra": { "time": 0.16, "process": "VNT", "annualNeed": 860, "executionPercentage": 100, "role": "Tec" },
-             "Acompanhamento da carteira de medição": { "time": 2, "process": "VNT", "annualNeed": 24, "executionPercentage": 100, "role": "Tec" },
-             "Analise de comp técnica": { "time": 0.66, "process": "VNT", "annualNeed": 2330, "executionPercentage": 100, "role": "Eng" },
-             "Gestão de investimento de Obras X Compensação": { "time": 0.66, "process": "VNT", "annualNeed": 1240, "executionPercentage": 100, "role": "Eng" },
-             "Gestão dos med Graf": { "time": 1.5, "process": "VNT", "annualNeed": 48, "executionPercentage": 100, "role": "Tec" },
-             "Report Semanal do VNT": { "time": 0.33, "process": "VNT", "annualNeed": 192, "executionPercentage": 100, "role": "Eng" },
-             "Demandas Ocasionais": { "time": 2, "process": "Outros", "annualNeed": 88, "executionPercentage": 100, "role": "Eng/Tec" }
+            "Elaboração de OGs para novas obras em TAF (OLTC, BC e Reator)": { "time": 1.3, "process": "Tensão em regime permanente", "annualNeed": 200, "executionPercentage": 100, "role": "Eng" },
+            "Elaboração de OGs para RTs-BCs (plano 8.4) Revisão de OGs": { "time": 0.8, "process": "Tensão em regime permanente", "annualNeed": 402, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Indicação e cobrança de pontos para o RUA": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 150, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Indicação de prioridades de RTs-BCs": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "Estudar reincidência de queimas de equipamento Acompanhamento, cobrança de RIME etc": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
+            "Controle de Fator de Potência PSU": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 24, "executionPercentage": 100, "role": "Eng" },
+            "Analise de instalação de RT e melhores práticas": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
+            "Realocação de equipamento e estudo para novos pontos de instalação": { "time": 2, "process": "Tensão em regime permanente", "annualNeed": 88, "executionPercentage": 100, "role": "Eng" },
+            "Validação da memória de massa após aplicação da OG": { "time": 1, "process": "Tensão em regime permanente", "annualNeed": 402, "executionPercentage": 100, "role": "Tec" },
+            "Diagnóstico de qualidade do produto": { "time": 2.6, "process": "Gestão de Qualidade do produto", "annualNeed": 812, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Suporte técnico para equipes de campo": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 132, "executionPercentage": 100, "role": "Tec" },
+            "Configuração e Gestão de Qualimetro": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 36, "executionPercentage": 100, "role": "Tec" },
+            "Gestão e acompanhamento de ações de mitigação": { "time": 4, "process": "Gestão de Qualidade do produto", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Visita à clientes": { "time": 20, "process": "Gestão de Qualidade do produto", "annualNeed": 30, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Reunião com Clientes": { "time": 0.8, "process": "Gestão de Qualidade do produto", "annualNeed": 144, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Controle e gestão das medições permanentes": { "time": 1, "process": "Gestão de Qualidade do produto", "annualNeed": 44, "executionPercentage": 100, "role": "Tec" },
+            "Elaboração de relatório com diagnóstico de qualidade": { "time": 1.5, "process": "Gestão de Qualidade do produto", "annualNeed": 700, "executionPercentage": 100, "role": "Eng" },
+            "Planos especiais para clientes (indústrias, oeste, etc.)": { "time": 0.5, "process": "Gestão de Qualidade do produto", "annualNeed": 1300, "executionPercentage": 100, "role": "Eng" },
+            "Atualização do Carregamento de AL, Trafos e LT": { "time": 2, "process": "Gestão de Qualidade do produto", "annualNeed": 12, "executionPercentage": 100, "role": "Tec" },
+            "Diagnóstico para SHD": { "time": 2.6, "process": "Gestão de Qualidade do produto", "annualNeed": 100, "executionPercentage": 100, "role": "Eng" },
+            "Análise e otimização dos alimentadores envolvidos nos planos especiais": { "time": 4, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 348, "executionPercentage": 100, "role": "Eng" },
+            "Ressaca dos planos": { "time": 16, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 3, "executionPercentage": 100, "role": "Eng" },
+            "Visita à região": { "time": 20, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 30, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Análise e otimização dos Trafos envolvidos nos planos especiais": { "time": 1, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 90, "executionPercentage": 100, "role": "Eng" },
+            "Análise e otimização de LDs envolvidos nos planos especiais": { "time": 1, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 50, "executionPercentage": 100, "role": "Eng" },
+            "Gestão e acompanhamento do plano de ação": { "time": 4, "process": "Planos Especiais (Verão, Cont. Termica e São João)", "annualNeed": 112, "executionPercentage": 100, "role": "Eng" },
+            "Padronizar análise e processos": { "time": 8, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng" },
+            "Reuniões de supervisão": { "time": 16, "process": "Processos", "annualNeed": 88, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Reunião de equipe": { "time": 16, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Reunião Gerencial (Desc etc.)": { "time": 4, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Workshop Super e Gerencia": { "time": 32, "process": "Processos", "annualNeed": 5, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Criar fluxo dos processos": { "time": 16, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Treinamento-Workshop-benchmarking": { "time": 32, "process": "Processos", "annualNeed": 5, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Congresso e Seminários": { "time": 24, "process": "Processos", "annualNeed": 8, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Processos de Inovação (Inovar)": { "time": 10, "process": "Processos", "annualNeed": 44, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Analise de contigência N-1 (quadrimestral)": { "time": 8, "process": "Quadrimestral", "annualNeed": 36, "executionPercentage": 100, "role": "Eng" },
+            "Elaboração de Relatório Quadrimestral": { "time": 12, "process": "Quadrimestral", "annualNeed": 36, "executionPercentage": 100, "role": "Eng/Tec" },
+            "Pontos de SEP": { "time": 0.5, "process": "Quadrimestral", "annualNeed": 24, "executionPercentage": 100, "role": "Eng" },
+            "Manutenção de Deck": { "time": 2, "process": "Quadrimestral", "annualNeed": 24, "executionPercentage": 100, "role": "Eng" },
+            "Criação do Deck": { "time": 16, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "ERAC": { "time": 1, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "Atendimento a Inequações ONS": { "time": 4, "process": "Quadrimestral", "annualNeed": 6, "executionPercentage": 100, "role": "Eng" },
+            "Indicação de MUST em contingência": { "time": 1, "process": "Quadrimestral", "annualNeed": 48, "executionPercentage": 100, "role": "Eng" },
+            "Suporte para Análise de RCA": { "time": 1, "process": "Quadrimestral", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "Planejar o Recurso para o próximo ano": { "time": 24, "process": "Plano 8.4", "annualNeed": 1, "executionPercentage": 100, "role": "Eng" },
+            "Acompanhar a utilização do recurso no ano corrente": { "time": 2, "process": "Plano 8.4", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "Priorizar aplicação do recurso para demandas não planejadas": { "time": 1.5, "process": "Plano 8.4", "annualNeed": 12, "executionPercentage": 100, "role": "Eng" },
+            "Gestão dos entrantes judiciais": { "time": 0.33, "process": "VNT", "annualNeed": 40, "executionPercentage": 100, "role": "Eng" },
+            "Elaboração da carteira de medição": { "time": 0.66, "process": "VNT", "annualNeed": 48, "executionPercentage": 100, "role": "Tec" },
+            "Lançamento das medições no SRT": { "time": 0.13, "process": "VNT", "annualNeed": 2850, "executionPercentage": 100, "role": "Tec" },
+            "Analise comp comercial": { "time": 0.33, "process": "VNT", "annualNeed": 2850, "executionPercentage": 100, "role": "Eng" },
+            "Acompanhamento ANEEL-Ouvidoria": { "time": 1.33, "process": "VNT", "annualNeed": 210, "executionPercentage": 100, "role": "Tec" },
+            "Gerar Nota de Obra": { "time": 0.16, "process": "VNT", "annualNeed": 860, "executionPercentage": 100, "role": "Tec" },
+            "Acompanhamento da carteira de medição": { "time": 2, "process": "VNT", "annualNeed": 24, "executionPercentage": 100, "role": "Tec" },
+            "Analise de comp técnica": { "time": 0.66, "process": "VNT", "annualNeed": 2330, "executionPercentage": 100, "role": "Eng" },
+            "Gestão de investimento de Obras X Compensação": { "time": 0.66, "process": "VNT", "annualNeed": 1240, "executionPercentage": 100, "role": "Eng" },
+            "Gestão dos med Graf": { "time": 1.5, "process": "VNT", "annualNeed": 48, "executionPercentage": 100, "role": "Tec" },
+            "Report Semanal do VNT": { "time": 0.33, "process": "VNT", "annualNeed": 192, "executionPercentage": 100, "role": "Eng" },
+            "Demandas Ocasionais": { "time": 2, "process": "Outros", "annualNeed": 88, "executionPercentage": 100, "role": "Eng/Tec" }
         };
 
         const elements = {
@@ -880,7 +979,8 @@
                 alimentadores: document.getElementById('tab-alimentadores'),
                 catalogo: document.getElementById('tab-catalogo'),
                 gut: document.getElementById('tab-gut'),
-                hc: document.getElementById('tab-hc')
+                hc: document.getElementById('tab-hc'),
+                users: document.getElementById('tab-users') // ADICIONADO
             },
             views: {
                 dashboard: document.getElementById('view-dashboard'),
@@ -889,7 +989,8 @@
                 alimentadores: document.getElementById('view-alimentadores'),
                 catalogo: document.getElementById('view-catalogo'),
                 gut: document.getElementById('view-gut'),
-                hc: document.getElementById('view-hc')
+                hc: document.getElementById('view-hc'),
+                users: document.getElementById('view-users') // ADICIONADO
             },
             tableContainer: document.getElementById('table-container'),
             alimentadoresTableContainer: document.getElementById('alimentadores-table-container'),
@@ -1006,61 +1107,40 @@
             andamento: "em andamento", validacao: "em validação", concluido: "concluído"
         };
 
-        const saveState = async () => {
-             try {
-                 const teamDocRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE);
-                 const cleanData = {
-                     tasks: JSON.parse(JSON.stringify(tasks)),
-                     history: JSON.parse(JSON.stringify(history)),
-                     allHeaders: allHeaders,
-                     timeLog: JSON.parse(JSON.stringify(timeLog)),
-                     activityCatalog: JSON.parse(JSON.stringify(activityCatalog)),
-                     planOptions: planOptions,
-                     alimentadoresData: JSON.parse(JSON.stringify(alimentadoresData)),
-                     savedAt: new Date().toISOString()
-                 };
-                 await setDoc(teamDocRef, cleanData);
-             } catch (error) {
-                 console.error("Erro ao salvar dados no Firebase:", error);
-                 alert("Ocorreu um erro ao salvar os dados. Verifique o console para mais detalhes.");
-             }
-         };
-
-         const toDateTimeLocal = (dateString) => {
+        const toDateTimeLocal = (dateString) => {
             if (!dateString) return '';
-            const date = new Date(dateString);
-            if (isNaN(date.getTime())) return '';
+            const date = toValidDate(dateString);
+            if (!date) return '';
             date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
             return date.toISOString().slice(0, 16);
-         };
+        };
 
-         const toDateInput = (dateString) => {
+        const toDateInput = (dateString) => {
             if (!dateString) return '';
-            const date = new Date(dateString);
-            if (isNaN(date.getTime())) return '';
+            const date = toValidDate(dateString);
+            if (!date) return '';
             date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
             return date.toISOString().split('T')[0];
-         };
+        };
 
+        const formatDate = (dateString) => {
+            if (!dateString) return '';
+            const date = toValidDate(dateString);
+            if (!date) return dateString;
+            return date.toLocaleString('pt-BR', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            }).replace(',', '');
+        };
 
-         const formatDate = (dateString) => {
-             if (!dateString) return '';
-             const date = new Date(dateString);
-             if (isNaN(date.getTime())) return dateString;
-             return date.toLocaleString('pt-BR', {
-                 day: '2-digit', month: '2-digit', year: 'numeric',
-                 hour: '2-digit', minute: '2-digit'
-             }).replace(',', '');
-         };
-
-         const formatTime = (ms) => {
+        const formatTime = (ms) => {
              if (typeof ms !== 'number' || ms < 0) return '00:00:00';
              const totalSeconds = Math.floor(ms / 1000);
              const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
              const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
              const seconds = (totalSeconds % 60).toString().padStart(2, '0');
              return `${hours}:${minutes}:${seconds}`;
-         };
+        };
 
         const handleFileImport = (event, processDataCallback) => {
             const file = event.target.files[0];
@@ -1086,152 +1166,235 @@
             event.target.value = '';
         }
 
-        const processDemandsData = (jsonData) => {
-            const existingTasksMap = new Map(tasks.map(task => [task.originalId, task]));
-            let newTasksCount = 0;
-            let updatedTasksCount = 0;
+                const processDemandsData = async (jsonData) => {
+    const batch = writeBatch(db);
+    const tasksCollectionRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks');
+    const existingTasksMap = new Map(tasks.map(task => [String(task.originalId), task]));
+    let newTasksCount = 0;
+    let updatedTasksCount = 0;
 
-            const newHeaders = new Set(allHeaders);
-            const addedFields = ['Plano', 'Prazo', 'Diagnóstico', 'Solicitado por', 'Área do Solicitante', 'Conta Contrato', 'Alimentador', 'Título e-mail Relacionado', 'Criado por'];
-            addedFields.forEach(h => newHeaders.add(h));
-            jsonData.forEach(row => Object.keys(row).forEach(key => newHeaders.add(key)));
-            allHeaders = Array.from(newHeaders);
+    const newHeaders = new Set(allHeaders);
+    const addedFields = ['Plano', 'Prazo', 'Diagnóstico', 'Solicitado por', 'Área do Solicitante', 'Conta Contrato', 'Alimentador', 'Título e-mail Relacionado', 'Criado por'];
+    addedFields.forEach(h => newHeaders.add(h));
+    jsonData.forEach(row => Object.keys(row).forEach(key => newHeaders.add(key)));
+    allHeaders = Array.from(newHeaders);
 
-            const statusMap = { "criada": "triagem", "em andamento": "andamento", "concluído": "concluido", "concluída": "concluido" };
-            const parseGUTValue = (gutString) => {
-                if (!gutString || typeof gutString !== 'string') return 0;
-                const match = gutString.match(/\((\d+)\)/);
-                return match ? parseInt(match[1], 10) : 0;
-            };
+    const parseGUTValue = (gutString) => {
+        if (!gutString || typeof gutString !== 'string') return 0;
+        const match = gutString.match(/\((\d+)\)/);
+        return match ? parseInt(match[1], 10) : 0;
+    };
 
-            try {
-                jsonData.forEach((row, index) => {
-                    const id_ref = row.ID_REF;
-                    if (!id_ref) return;
+    try {
+        for (const row of jsonData) {
+            const id_ref = String(row.ID_REF);
+            if (!id_ref) continue;
 
-                    const existingTask = existingTasksMap.get(id_ref);
+            const existingTask = existingTasksMap.get(id_ref);
 
-                    if (existingTask) {
-                        // INÍCIO DA LÓGICA DE ATUALIZAÇÃO MODIFICADA
-                        updatedTasksCount++;
+            if (existingTask) {
+                // LÓGICA DE ATUALIZAÇÃO PARA DEMANDAS EXISTENTES
+                updatedTasksCount++;
+                const taskRef = doc(tasksCollectionRef, existingTask.id);
+                let updatedData = {};
+                let updatedOriginalData = { ...existingTask.originalData };
 
-                        // Regra de Segurança: Atualiza campos apenas se a planilha tiver um novo valor.
-                        // Isso impede que células vazias na planilha apaguem dados já preenchidos no app.
-                        if (row.Título) existingTask.title = row.Título;
-                        if (row.Descrição) existingTask.description = row.Descrição;
-                        if (row['Atribuído a']) existingTask.responsible = row['Atribuído a'];
-                        if (row['Núcleo']) existingTask.nucleus = row['Núcleo'];
+                const fieldsToUpdateMap = {
+                    'Título': { key: 'title', isRoot: true },
+                    'Descrição': { key: 'description', isRoot: true },
+                    'Atribuído a': { key: 'responsible', isRoot: true },
+                    'Núcleo': { key: 'nucleus', isRoot: true },
+                    'Conta Contrato': { key: 'Conta Contrato' },
+                    'Prazo': { key: 'Prazo', isDate: true },
+                    'Plano': { key: 'Plano' },
+                    'Alimentador': { key: 'Alimentador' },
+                    'Solicitado por': { key: 'Solicitado por' },
+                    'Área do Solicitante': { key: 'Área do Solicitante' },
+                    'Título e-mail Relacionado': { key: 'Título e-mail Relacionado' }
+                };
 
-                        // Atualiza os dados originais (usados na tabela e exportação) com a mesma regra de segurança.
-                        // O Object.assign foi substituído por uma iteração para garantir a regra.
-                        Object.keys(row).forEach(key => {
-                            if (row[key] !== null && row[key] !== undefined && row[key] !== '') {
-                                existingTask.originalData[key] = row[key];
-                            }
-                        });
-                        
-                        // Atualiza e recalcula o Score GUT se os valores existirem na planilha
-                        const g = parseGUTValue(row['Gravidade (GUT)']);
-                        const u = parseGUTValue(row['Urgência (GUT)']);
-                        const t = parseGUTValue(row['Tendência (GUT)']);
-                        
-                        // Apenas recalcula se houver um valor GUT válido (G, U ou T > 0)
-                        if (g > 0 || u > 0 || t > 0) {
-                            existingTask.gut = { g, u, t };
-                            existingTask.scoreGUT = g * u * t;
-                            // Garante que o tipo de demanda seja 'problema' se estivermos importando um score GUT
-                            existingTask.demandType = 'problema'; 
+                for (const [sheetKey, config] of Object.entries(fieldsToUpdateMap)) {
+                    const rowValue = row[sheetKey];
+                    if (rowValue !== null && rowValue !== undefined && rowValue !== '') {
+                        const value = config.isDate ? parseSheetDate(rowValue) : rowValue;
+                        if (config.isRoot) {
+                            updatedData[config.key] = value;
+                        } else {
+                            updatedOriginalData[config.key] = value;
                         }
+                    }
+                }
+                
+                const g = parseGUTValue(row['Gravidade (GUT)']);
+                const u = parseGUTValue(row['Urgência (GUT)']);
+                const t = parseGUTValue(row['Tendência (GUT)']);
+                if (g > 0 || u > 0 || t > 0) {
+                    updatedData.gut = { g, u, t };
+                    updatedData.scoreGUT = g * u * t;
+                    updatedData.demandType = 'problema';
+                }
+                
+                updatedData.originalData = updatedOriginalData;
 
-                        // Regra de Segurança: O status do Kanban NÃO é alterado, exceto na condição especial abaixo.
-                        const sheetStatus = (row.Status || '').toLowerCase().trim();
+                const sheetStatus = (row.Status || '').toLowerCase().trim();
+                const completionDate = parseSheetDate(row['Data de Conclusão']);
+                const validCompletedStatus = ['concluido', 'concluído', 'concluida', 'concluída'];
 
-                        // EXCEÇÃO à Regra de Segurança: Força o status para 'Concluído'
-                        // Apenas se o status na planilha for 'concluído' E a data de conclusão estiver preenchida.
-                        if ((sheetStatus === 'concluído' || sheetStatus === 'concluída') && row['Data de Conclusão']) {
-                            const completionDate = new Date(row['Data de Conclusão']);
-                            if (!isNaN(completionDate.getTime())) {
-                                existingTask.status = 'concluido';
-                                existingTask.completedAt = completionDate.toISOString();
-                                existingTask.originalData['Data de Conclusão'] = completionDate;
-                            }
+                if (validCompletedStatus.includes(sheetStatus) && completionDate) {
+                    const activityFromSheet = row['Atividade'];
+                    const subtasks = existingTask.subtasks || [];
+                    
+                    const canOverwrite = subtasks.length === 0 || 
+                                         (subtasks.length === 1 && subtasks[0].name === activityFromSheet);
+
+                    if (canOverwrite) {
+                        updatedData.status = 'concluido';
+                        updatedData.completedAt = completionDate;
+                        updatedData.originalData['Data de Conclusão'] = completionDate;
+
+                        if (subtasks.length === 1) {
+                            updatedData.subtasks = [{ ...subtasks[0], status: 'completed', isTiming: false }];
                         }
-                        // FIM DA LÓGICA DE ATUALIZAÇÃO MODIFICADA
+                    }
+                }
+                
+                batch.update(taskRef, updatedData);
 
+            } else {
+                // LÓGICA PARA NOVAS DEMANDAS (COM CORREÇÃO)
+                newTasksCount++;
+                const statusMap = { "criada": "triagem", "em andamento": "andamento" };
+                const validCompletedStatus = ['concluido', 'concluído', 'concluida', 'concluída'];
+                const sheetStatusText = (row.Status || '').toLowerCase().trim();
+                
+                let status;
+                
+                if (validCompletedStatus.includes(sheetStatusText)) {
+                    status = 'concluido';
+                } else {
+                    status = statusMap[sheetStatusText] || 'triagem';
+                    const g = parseGUTValue(row['Gravidade (GUT)']);
+                    const u = parseGUTValue(row['Urgência (GUT)']);
+                    const t = parseGUTValue(row['Tendência (GUT)']);
+                    const calculatedGUT = g * u * t;
+
+                    if (status === 'triagem' && calculatedGUT > 0) {
+                        status = 'backlog';
+                    }
+                }
+
+                const activityName = row['Atividade'];
+                const catalogEntry = activityCatalog[activityName] || { time: 0, process: 'Não Definido', role: 'N/A' };
+
+                const originalDataFormatted = {};
+                Object.keys(row).forEach(key => {
+                    if (key === 'Criado_GD' || key === 'Data de Conclusão' || key === 'Prazo') {
+                        originalDataFormatted[key] = parseSheetDate(row[key]);
                     } else {
-                        // A lógica para criar NOVOS cards permanece inalterada.
-                        const sheetStatus = (row.Status || '').toLowerCase().trim();
-                        let status = statusMap[sheetStatus] || 'triagem';
-                        const g = parseGUTValue(row['Gravidade (GUT)']);
-                        const u = parseGUTValue(row['Urgência (GUT)']);
-                        const t = parseGUTValue(row['Tendência (GUT)']);
-                        const calculatedGUT = g * u * t;
-                        if (status === 'triagem' && calculatedGUT > 0) status = 'backlog';
-
-                        const activityName = row['Atividade'];
-                        const catalogEntry = activityCatalog[activityName] || { time: 0, process: 'Não Definido', role: 'N/A' };
-
-                        const newTask = {
-                            id: `sheet-${id_ref}-${Date.now()}`,
-                            originalId: id_ref,
-                            title: row.Título || 'Sem Título',
-                            description: row.Descrição || '',
-                            status: status,
-                            responsible: row['Atribuído a'] || '',
-                            createdAt: row.Criado_GD ? new Date(row.Criado_GD).toISOString() : new Date().toISOString(),
-                            scoreGUT: calculatedGUT,
-                            demandType: 'problema',
-                            originalData: row,
-                            completedAt: null,
-                            startedAt: null,
-                            gut: { g, u, t },
-                            reclamacoes30d: row['Nº de Reclamações dos últimos 30 dias'] || 0,
-                            nucleus: row['Núcleo'] || '',
-                            timeSpent: 0,
-                            isTiming: false,
-                            lastStartTime: null,
-                            playCount: 0,
-                            subtasks: [],
-                            lastActiveSubtaskId: null,
-                            expectedTime: catalogEntry.time,
-                            process: catalogEntry.process,
-                            role: catalogEntry.role
-                        };
-
-                        if (status === 'andamento' || status === 'validacao' || status === 'concluido') {
-                            newTask.startedAt = newTask.createdAt;
-                        }
-                        if (status === 'concluido' && row['Data de Conclusão']) {
-                            const completionDate = new Date(row['Data de Conclusão']);
-                            if (!isNaN(completionDate.getTime())) newTask.completedAt = completionDate.toISOString();
-                        }
-                        tasks.push(newTask);
-                        newTasksCount++;
+                        originalDataFormatted[key] = row[key];
                     }
                 });
-            } catch(error) {
-                console.error("[ERRO CRÍTICO] Falha durante o processamento de uma linha da planilha.", error);
-                alert("ERRO: Falha ao processar os dados da planilha. Verifique se há dados inválidos. A importação foi cancelada.");
-                return;
-            }
 
-            history = generateHistoricalCfdData(tasks);
-            saveState();
-            populateGlobalFilters();
-            alert(`Demandas importadas com sucesso!\n\n- ${newTasksCount} novas demandas foram adicionadas.\n- ${updatedTasksCount} demandas existentes foram atualizadas.`);
-            switchTab('dashboard');
+                const creationDate = parseSheetDate(row.Criado_GD) || new Date();
+                const completionDate = parseSheetDate(row['Data de Conclusão']);
+
+                const newTaskData = {
+                    originalId: id_ref,
+                    title: row.Título || 'Sem Título',
+                    description: row.Descrição || '',
+                    status: status,
+                    responsible: row['Atribuído a'] || '',
+                    createdAt: creationDate,
+                    scoreGUT: parseGUTValue(row['Gravidade (GUT)']) * parseGUTValue(row['Urgência (GUT)']) * parseGUTValue(row['Tendência (GUT)']),
+                    demandType: 'problema',
+                    originalData: originalDataFormatted,
+                    completedAt: null,
+                    startedAt: null,
+                    gut: { 
+                        g: parseGUTValue(row['Gravidade (GUT)']), 
+                        u: parseGUTValue(row['Urgência (GUT)']), 
+                        t: parseGUTValue(row['Tendência (GUT)'])
+                    },
+                    reclamacoes30d: row['Nº de Reclamações dos últimos 30 dias'] || 0,
+                    nucleus: row['Núcleo'] || '',
+                    timeSpent: 0,
+                    isTiming: false,
+                    lastStartTime: null,
+                    playCount: 0,
+                    subtasks: [],
+                    lastActiveSubtaskId: null,
+                    expectedTime: catalogEntry.time,
+                    process: catalogEntry.process,
+                    role: catalogEntry.role
+                };
+                
+                if (activityName && catalogEntry && catalogEntry.time > 0) {
+                    const initialSubtask = {
+                        id: `sub-${Date.now()}`,
+                        name: activityName,
+                        timeSpent: 0,
+                        isTiming: false,
+                        lastStartTime: null,
+                        status: 'pending',
+                        expectedTime: catalogEntry.time || 0
+                    };
+                    newTaskData.subtasks.push(initialSubtask);
+                }
+
+                if (status === 'andamento' || status === 'validacao' || status === 'concluido') {
+                    newTaskData.startedAt = creationDate;
+                }
+                
+                if (status === 'concluido' && completionDate) {
+                    newTaskData.completedAt = completionDate;
+                    if (newTaskData.subtasks.length > 0) {
+                        newTaskData.subtasks[0].status = 'completed';
+                    }
+                }
+
+                const newTaskRef = doc(tasksCollectionRef);
+                batch.set(newTaskRef, newTaskData);
+            }
         }
 
-        const processAlimentadoresData = (jsonData) => {
+        await batch.commit();
+        alert(`Demandas importadas com sucesso!\n\n- ${newTasksCount} novas demandas foram adicionadas.\n- ${updatedTasksCount} demandas existentes foram atualizadas.`);
+        
+    } catch(error) {
+        console.error("[ERRO CRÍTICO] Falha durante o processamento ou salvamento em lote.", error);
+        alert("ERRO: Falha ao processar e salvar os dados da planilha. Verifique se há dados inválidos. A importação foi cancelada.");
+        return;
+    }
+
+    populateGlobalFilters();
+    switchTab('dashboard');
+};
+
+        const processAlimentadoresData = async (jsonData) => {
             if (!jsonData || jsonData.length === 0) {
                 alert("Nenhum dado encontrado na planilha de alimentadores.");
                 return;
             }
-            alimentadoresData = jsonData;
-            saveState();
-            alert(`${jsonData.length} registros de alimentadores foram importados com sucesso.`);
-            renderActiveTabView();
-        }
+            
+            const batch = writeBatch(db);
+            const alimentadoresCollectionRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'alimentadores');
+            
+            jsonData.forEach(row => {
+                const docId = String(row.Alimentador).replace(/[.#$[\]/]/g, '_');
+                if(docId) {
+                    const docRef = doc(alimentadoresCollectionRef, docId);
+                    batch.set(docRef, row);
+                }
+            });
+
+            try {
+                await batch.commit();
+                alert(`${jsonData.length} registros de alimentadores foram importados/atualizados com sucesso.`);
+            } catch (error) {
+                console.error("Erro ao importar alimentadores:", error);
+                alert("Ocorreu um erro ao importar os alimentadores.");
+            }
+        };
 
          const handleExport = () => {
              if (tasks.length === 0) {
@@ -1245,16 +1408,16 @@
                  const exportRow = { ...task.originalData };
 
                  if (task.createdAt) {
-                     const startDate = new Date(task.createdAt);
-                     const endDate = task.completedAt ? new Date(task.completedAt) : new Date();
+                     const startDate = toValidDate(task.createdAt);
+                     const endDate = task.completedAt ? toValidDate(task.completedAt) : new Date();
                      exportRow['Lead Time (dias)'] = ((endDate - startDate) / msPerDay).toFixed(1);
                  } else {
                      exportRow['Lead Time (dias)'] = 'N/A';
                  }
 
                  if (task.startedAt && task.completedAt) {
-                     const startDate = new Date(task.startedAt);
-                     const endDate = new Date(task.completedAt);
+                     const startDate = toValidDate(task.startedAt);
+                     const endDate = toValidDate(task.completedAt);
                      exportRow['Cycle Time (dias)'] = ((endDate - startDate) / msPerDay).toFixed(1);
                  } else {
                       exportRow['Cycle Time (dias)'] = 'N/A';
@@ -1266,9 +1429,9 @@
                  exportRow['Desvio (h)'] = task.expectedTime > 0 ? deviation.toFixed(2) : 'N/A';
                  exportRow['Contador de Play'] = task.playCount || 0;
 
-                 if (task.startedAt) exportRow['Data de Início'] = new Date(task.startedAt);
-                 if (task.completedAt) exportRow['Data de Conclusão'] = new Date(task.completedAt);
-                 if (task.createdAt) exportRow['Criado_GD'] = new Date(task.createdAt);
+                 if (task.startedAt) exportRow['Data de Início'] = toValidDate(task.startedAt);
+                 if (task.completedAt) exportRow['Data de Conclusão'] = toValidDate(task.completedAt);
+                 if (task.createdAt) exportRow['Criado_GD'] = toValidDate(task.createdAt);
 
                  exportRow['Status'] = Object.keys(STATUS_TO_SHEET_MAP).find(key => STATUS_TO_SHEET_MAP[key] === task.status) || task.status;
 
@@ -1283,35 +1446,44 @@
              XLSX.utils.book_append_sheet(wb, ws, "Demandas Atualizadas");
              XLSX.writeFile(wb, "demandas_atualizadas.xlsx");
          };
+        
+        async function clearCollection(collectionRef) {
+            const querySnapshot = await getDocs(collectionRef);
+            if (querySnapshot.empty) return;
+            
+            const batch = writeBatch(db);
+            querySnapshot.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+        }
 
          const clearData = async () => {
-             if(confirm("ATENÇÃO: Esta ação limpará TODAS as demandas, histórico, dados do catálogo e de alimentadores para toda a equipe. Esta ação não pode ser desfeita. Deseja continuar?")) {
-                 tasks = [];
-                 history = [];
-                 teamMembers = [];
-                 allHeaders = [];
-                 timeLog = [];
-                 planOptions = defaultPlans;
-                 alimentadoresData = [];
-                 currentSort = { by: 'score', direction: 'desc' };
-                 activityCatalog = defaultActivityCatalog;
-                 tableSort = { by: null, direction: 'asc' };
-                 catalogSort = { by: 'Nome da Atividade', direction: 'asc' };
+             if(confirm("ATENÇÃO: Esta ação limpará TODAS as demandas, o catálogo e os alimentadores desta equipe. Esta ação não pode ser desfeita e pode demorar alguns segundos. Deseja continuar?")) {
+                try {
+                    console.log("Iniciando limpeza de dados...");
+                    const tasksRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks');
+                    const catalogRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'activity_catalog');
+                    const alimentadoresRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'alimentadores');
+                    
+                    await clearCollection(tasksRef);
+                    await clearCollection(catalogRef);
+                    await clearCollection(alimentadoresRef);
 
-                 await saveState();
+                    const catalogBatch = writeBatch(db);
+                    Object.entries(defaultActivityCatalog).forEach(([name, data]) => {
+                        const sanitizedName = sanitizeDocId(name); // Sanitize name
+                        const docRef = doc(catalogRef, sanitizedName);
+                        catalogBatch.set(docRef, data);
+                    });
+                    await catalogBatch.commit();
+                    
+                    alert("Aplicação reiniciada. Todos os dados da equipe foram limpos e o catálogo padrão foi restaurado.");
 
-                 Object.values(chartObjects).forEach(chart => chart.destroy());
-                 chartObjects = {};
-                 elements.globalFilters.innerHTML = '';
-
-                 renderDashboard([]);
-                 renderBoard([]);
-                 renderTable([]);
-
-                 elements.kanbanSortBy.value = 'score';
-                 elements.kanbanSortDirection.value = 'desc';
-                 switchTab('dashboard');
-                 alert("Aplicação reiniciada. Todos os dados da equipe foram limpos.");
+                } catch (error) {
+                    console.error("Erro ao limpar dados:", error);
+                    alert("Ocorreu um erro ao tentar limpar os dados. Verifique o console.");
+                }
              }
          };
 
@@ -1328,6 +1500,8 @@
              filtersContainer.innerHTML = '';
 
              teamMembers = [...new Set(tasks.map(t => t.responsible).filter(Boolean))].sort();
+             planOptions = [...new Set(tasks.map(t => t.originalData?.Plano).filter(Boolean))].sort();
+
 
              const filterConfigs = [
                  { key: 'ID_REF', label: 'ID (REF)', type: 'text' },
@@ -1335,7 +1509,7 @@
                  { key: 'status', label: 'Status Kanban', values: Object.keys(STATUS_OPTIONS) },
                  { key: 'responsible', label: 'Responsável', values: teamMembers },
                  { key: 'Núcleo', label: 'Núcleo' },
-                 { key: 'Plano', label: 'Plano' },
+                 { key: 'Plano', label: 'Plano', values: planOptions },
                  { key: 'UTD', label: 'UTD' },
                  { key: 'Conta Contrato', label: 'Conta Contrato', type: 'text' },
                  { key: 'Prioridade', label: 'Criticidade' },
@@ -1404,7 +1578,7 @@
 
                  switch (sortBy) {
                      case 'score': primaryA = a.scoreGUT || a.scoreRICE || 0; primaryB = b.scoreGUT || b.scoreRICE || 0; break;
-                     case 'createdAt': primaryA = new Date(a.createdAt); primaryB = new Date(b.createdAt); break;
+                     case 'createdAt': primaryA = toValidDate(a.createdAt); primaryB = toValidDate(b.createdAt); break;
                      case 'id': primaryA = parseInt(a.originalId, 10) || 0; primaryB = parseInt(b.originalId, 10) || 0; break;
                      case 'reclamacoes': primaryA = a.reclamacoes30d || 0; primaryB = b.reclamacoes30d || 0; break;
                      case 'criticidade': primaryA = priorityMap[a.originalData?.Prioridade] || 0; primaryB = priorityMap[b.originalData?.Prioridade] || 0; break;
@@ -1423,7 +1597,10 @@
                  const reclamacoesB = b.reclamacoes30d || 0;
                  if (reclamacoesA !== reclamacoesB) return reclamacoesB - reclamacoesA;
 
-                 return new Date(a.createdAt) - new Date(b.createdAt);
+                 const dateA = toValidDate(a.createdAt);
+                 const dateB = toValidDate(b.createdAt);
+                 if (dateA && dateB) return dateA - dateB;
+                 return 0;
              });
          };
 
@@ -1443,6 +1620,13 @@
              else if (activeTab === 'hc') renderHC();
              else if (activeTab === 'alimentadores') renderAlimentadoresTable();
              else if (activeTab === 'gut') renderGUTGuide();
+             else if (activeTab === 'users') { // ADICIONADO
+                // Primeiro precisamos buscar os dados mais recentes antes de renderizar
+                getDocs(collection(db, 'allowed_users')).then(snapshot => {
+                    const allowedUsers = snapshot.docs.map(doc => ({ matricula: doc.id, ...doc.data() }));
+                    renderAllowedUsersTable(allowedUsers);
+                });
+             }
          };
 
         const createCardElement = (task) => {
@@ -1617,116 +1801,125 @@
          };
 
          const renderTable = (tasksToRender) => {
-             const container = elements.tableContainer;
-             if (!allHeaders || allHeaders.length === 0) {
-                 container.innerHTML = '<p class="text-gray-400 p-4">Nenhum dado importado. Clique em "Importar Demandas" para começar.</p>';
-                 return;
-             }
+    const container = elements.tableContainer;
+    if (!allHeaders || allHeaders.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 p-4">Nenhum dado importado. Clique em "Importar Demandas" para começar.</p>';
+        return;
+    }
 
-             if (tableSort.by) {
-                const msPerDay = 1000 * 60 * 60 * 24;
-                const isAsc = tableSort.direction === 'asc';
+    if (tableSort.by) {
+        const msPerDay = 1000 * 60 * 60 * 24;
+        const isAsc = tableSort.direction === 'asc';
 
-                const getValue = (task, key) => {
-                    switch(key) {
-                        case 'Score': return task.scoreGUT || task.scoreRICE || 0;
-                        case 'Data de Início': return task.startedAt ? new Date(task.startedAt) : null;
-                        case 'Lead Time (dias)':
-                            return task.createdAt ? (( (task.completedAt ? new Date(task.completedAt) : new Date()) - new Date(task.createdAt) ) / msPerDay) : -1;
-                        case 'Cycle Time (dias)':
-                            return (task.startedAt && task.completedAt) ? ((new Date(task.completedAt) - new Date(task.startedAt)) / msPerDay) : -1;
-                        case 'Tempo Gasto (HH:MM:SS)': return task.timeSpent || 0;
-                        case 'Tempo Previsto (h)': return task.expectedTime || 0;
-                        case 'Desvio (h)': return task.expectedTime > 0 ? (task.timeSpent / 3600000) - task.expectedTime : -Infinity;
-                        case 'Contador de Play': return task.playCount || 0;
-                        default:
-                            const value = task.originalData ? task.originalData[key] : undefined;
-                            if (value instanceof Date) return value;
-                            if (typeof value === 'string' && !isNaN(Date.parse(value))) return new Date(value);
-                            return value;
+        const getValue = (task, key) => {
+            switch(key) {
+                case 'Score': return task.scoreGUT || task.scoreRICE || 0;
+                case 'Data de Início': return task.startedAt ? toValidDate(task.startedAt) : null;
+                case 'Lead Time (dias)':
+                    return task.createdAt ? (( (task.completedAt ? toValidDate(task.completedAt) : new Date()) - toValidDate(task.createdAt) ) / msPerDay) : -1;
+                case 'Cycle Time (dias)':
+                    return (task.startedAt && task.completedAt) ? ((toValidDate(task.completedAt) - toValidDate(task.startedAt)) / msPerDay) : -1;
+                case 'Tempo Gasto (HH:MM:SS)': return task.timeSpent || 0;
+                case 'Tempo Previsto (h)': return task.expectedTime || 0;
+                case 'Desvio (h)': return task.expectedTime > 0 ? (task.timeSpent / 3600000) - task.expectedTime : -Infinity;
+                case 'Contador de Play': return task.playCount || 0;
+                default:
+                    const value = task.originalData ? task.originalData[key] : undefined;
+                    if (value instanceof Date) return value;
+                    const parsedDate = toValidDate(value);
+                    return parsedDate || value;
+            }
+        };
+
+        tasksToRender.sort((a, b) => {
+            let valA = getValue(a, tableSort.by);
+            let valB = getValue(b, tableSort.by);
+
+            if (valA === null || valA === undefined) valA = isAsc ? Infinity : -Infinity;
+            if (valB === null || valB === undefined) valB = isAsc ? Infinity : -Infinity;
+
+            if (typeof valA === 'string') valA = valA.toLowerCase();
+            if (typeof valB === 'string') valB = valB.toLowerCase();
+
+            if (valA < valB) return isAsc ? -1 : 1;
+            if (valA > valB) return isAsc ? 1 : -1;
+            return 0;
+        });
+    }
+
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const headers = [...allHeaders, 'Score', 'Data de Início', 'Lead Time (dias)', 'Cycle Time (dias)', 'Tempo Gasto (HH:MM:SS)', 'Tempo Previsto (h)', 'Desvio (h)', 'Contador de Play'];
+    const dateColumns = ['Criado', 'Modificado', 'Data de Conclusão', 'Prazo', 'Data de Início', 'Criado_GD'];
+    
+    // << INÍCIO DA MELHORIA: Lista de colunas para truncar foi expandida >>
+    const longTextColumns = [
+        'Título', 'Descrição', 'Diagnóstico', 'Atividade',
+        'Gravidade (GUT)', 'Urgência (GUT)', 'Tendência (GUT)',
+        'Solicitado por', 'Área do Solicitante',
+        'Título e-mail Relacionado', 'Motivo Reclamação', 'Observação'
+    ];
+    // << FIM DA MELHORIA >>
+
+    const table = `
+        <table class="w-full text-left">
+            <thead><tr>${headers.map(h => {
+               const isSorted = tableSort.by === h;
+               const indicator = isSorted ? (tableSort.direction === 'asc' ? '▲' : '▼') : '';
+               return `<th class="p-2 border-b border-gray-700 whitespace-nowrap sortable-header" data-sort-key="${h}">${h}<span class="sort-indicator">${indicator}</span></th>`;
+            }).join('')}</tr></thead>
+            <tbody>
+                ${tasksToRender.map(task => {
+                    let leadTimeDays = 'N/A';
+                    if (task.createdAt) {
+                        const startDate = toValidDate(task.createdAt);
+                        const endDate = task.completedAt ? toValidDate(task.completedAt) : new Date();
+                        if (startDate) leadTimeDays = ((endDate - startDate) / msPerDay).toFixed(1);
                     }
-                };
 
-                tasksToRender.sort((a, b) => {
-                    let valA = getValue(a, tableSort.by);
-                    let valB = getValue(b, tableSort.by);
+                    let cycleTimeDays = 'N/A';
+                    if (task.startedAt && task.completedAt) {
+                        const startDate = toValidDate(task.startedAt);
+                        const endDate = toValidDate(task.completedAt);
+                        if (startDate && endDate) cycleTimeDays = ((endDate - startDate) / msPerDay).toFixed(1);
+                    }
 
-                    if (valA === null || valA === undefined) valA = isAsc ? Infinity : -Infinity;
-                    if (valB === null || valB === undefined) valB = isAsc ? Infinity : -Infinity;
+                    const score = task.scoreGUT || task.scoreRICE || 0;
+                    const timeSpentHours = task.timeSpent / 3600000;
+                    const deviation = timeSpentHours - task.expectedTime;
+                    let deviationClass = '';
+                    if (task.expectedTime > 0) {
+                        deviationClass = deviation > 0 ? 'text-red-400' : 'text-green-400';
+                    }
 
-                    if (typeof valA === 'string') valA = valA.toLowerCase();
-                    if (typeof valB === 'string') valB = valB.toLowerCase();
+                    return `
+                    <tr class="hover:bg-gray-700/50">
+                        ${allHeaders.map(h => {
+                            const cellValue = (task.originalData && task.originalData[h] !== undefined) ? task.originalData[h] : '';
+                            const formattedValue = dateColumns.includes(h) ? formatDate(cellValue) : (cellValue || '');
+                            
+                            if (longTextColumns.includes(h)) {
+                                const tooltipText = String(cellValue).replace(/"/g, '&quot;');
+                                return `<td class="p-2 border-b border-gray-700" title="${tooltipText}">
+                                            <div class="max-w-md overflow-hidden text-ellipsis whitespace-nowrap">${formattedValue}</div>
+                                        </td>`;
+                            }
 
-                    if (valA < valB) return isAsc ? -1 : 1;
-                    if (valA > valB) return isAsc ? 1 : -1;
-                    return 0;
-                });
-             }
-
-             const msPerDay = 1000 * 60 * 60 * 24;
-             const headers = [...allHeaders, 'Score', 'Data de Início', 'Lead Time (dias)', 'Cycle Time (dias)', 'Tempo Gasto (HH:MM:SS)', 'Tempo Previsto (h)', 'Desvio (h)', 'Contador de Play'];
-             const longTextColumns = ['Título', 'Descrição', 'Motivo Reclamação', 'Observação'];
-             const dateColumns = ['Criado', 'Modificado', 'Data de Conclusão', 'Prazo', 'Data de Início'];
-
-             const getCellClass = (header) => {
-                 let classes = 'p-2 border-b border-gray-700';
-                 if (longTextColumns.includes(header)) classes += ' break-words max-w-md';
-                 else classes += ' whitespace-nowrap';
-                 return classes;
-             };
-
-             const table = `
-                 <table class="w-full text-left">
-                     <thead><tr>${headers.map(h => {
-                        const isSorted = tableSort.by === h;
-                        const indicator = isSorted ? (tableSort.direction === 'asc' ? '▲' : '▼') : '';
-                        return `<th class="p-2 border-b border-gray-700 whitespace-nowrap sortable-header" data-sort-key="${h}">${h}<span class="sort-indicator">${indicator}</span></th>`;
-                     }).join('')}</tr></thead>
-                     <tbody>
-                         ${tasksToRender.map(task => {
-                             let leadTimeDays = 'N/A';
-                             if (task.createdAt) {
-                                 const startDate = new Date(task.createdAt);
-                                 const endDate = task.completedAt ? new Date(task.completedAt) : new Date();
-                                 leadTimeDays = ((endDate - startDate) / msPerDay).toFixed(1);
-                             }
-
-                             let cycleTimeDays = 'N/A';
-                             if (task.startedAt && task.completedAt) {
-                                 const startDate = new Date(task.startedAt);
-                                 const endDate = new Date(task.completedAt);
-                                 cycleTimeDays = ((endDate - startDate) / msPerDay).toFixed(1);
-                             }
-
-                             const score = task.scoreGUT || task.scoreRICE || 0;
-                             const timeSpentHours = task.timeSpent / 3600000;
-                             const deviation = timeSpentHours - task.expectedTime;
-                             let deviationClass = '';
-                             if (task.expectedTime > 0) {
-                                 deviationClass = deviation > 0 ? 'text-red-400' : 'text-green-400';
-                             }
-
-                             return `
-                             <tr class="hover:bg-gray-700/50">
-                                 ${allHeaders.map(h => {
-                                     const cellValue = (task.originalData && task.originalData[h] !== undefined) ? task.originalData[h] : '';
-                                     const formattedValue = dateColumns.includes(h) ? formatDate(cellValue) : (cellValue || '');
-                                     return `<td class="${getCellClass(h)}">${formattedValue}</td>`;
-                                 }).join('')}
-                                 <td class="p-2 border-b border-gray-700 whitespace-nowrap font-bold text-yellow-400">${score.toFixed(1)}</td>
-                                 <td class="p-2 border-b border-gray-700 whitespace-nowrap">${formatDate(task.startedAt)}</td>
-                                 <td class="p-2 border-b border-gray-700 whitespace-nowrap">${leadTimeDays}</td>
-                                 <td class="p-2 border-b border-gray-700 whitespace-nowrap">${cycleTimeDays}</td>
-                                 <td class="p-2 border-b border-gray-700 whitespace-nowrap">${formatTime(task.timeSpent)}</td>
-                                 <td class="p-2 border-b border-gray-700 whitespace-nowrap">${task.expectedTime > 0 ? task.expectedTime.toFixed(1) : 'N/A'}</td>
-                                 <td class="p-2 border-b border-gray-700 whitespace-nowrap font-bold ${deviationClass}">${task.expectedTime > 0 ? deviation.toFixed(2) : 'N/A'}</td>
-                                 <td class="p-2 border-b border-gray-700 whitespace-nowrap">${task.playCount || 0}</td>
-                             </tr>`;
-                         }).join('')}
-                     </tbody>
-                 </table>`;
-             container.innerHTML = tasksToRender.length > 0 ? table : '<p class="text-gray-400 p-4">Nenhuma demanda corresponde aos filtros aplicados.</p>';
-         };
+                            return `<td class="p-2 border-b border-gray-700 whitespace-nowrap">${formattedValue}</td>`;
+                        }).join('')}
+                        <td class="p-2 border-b border-gray-700 whitespace-nowrap font-bold text-yellow-400">${score.toFixed(1)}</td>
+                        <td class="p-2 border-b border-gray-700 whitespace-nowrap">${formatDate(task.startedAt)}</td>
+                        <td class="p-2 border-b border-gray-700 whitespace-nowrap">${leadTimeDays}</td>
+                        <td class="p-2 border-b border-gray-700 whitespace-nowrap">${cycleTimeDays}</td>
+                        <td class="p-2 border-b border-gray-700 whitespace-nowrap">${formatTime(task.timeSpent)}</td>
+                        <td class="p-2 border-b border-gray-700 whitespace-nowrap">${task.expectedTime > 0 ? task.expectedTime.toFixed(1) : 'N/A'}</td>
+                        <td class="p-2 border-b border-gray-700 whitespace-nowrap font-bold ${deviationClass}">${task.expectedTime > 0 ? deviation.toFixed(2) : 'N/A'}</td>
+                        <td class="p-2 border-b border-gray-700 whitespace-nowrap">${task.playCount || 0}</td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>`;
+    container.innerHTML = tasksToRender.length > 0 ? table : '<p class="text-gray-400 p-4">Nenhuma demanda corresponde aos filtros aplicados.</p>';
+};
 
          const renderAlimentadoresTable = () => {
             const container = elements.alimentadoresTableContainer;
@@ -1735,7 +1928,7 @@
                 return;
             }
 
-            const headers = Object.keys(alimentadoresData[0]);
+            const headers = Object.keys(alimentadoresData[0] || {});
 
             if (alimentadoresSort.by) {
                 const isAsc = alimentadoresSort.direction === 'asc';
@@ -1880,7 +2073,7 @@
 
              container.innerHTML = inProgressSubtasks.map(subtask => {
                  const task = subtask.parentTask;
-                 const time = subtask.timeSpent + (subtask.isTiming ? (new Date() - new Date(subtask.lastStartTime)) : 0);
+                 const time = subtask.timeSpent + (subtask.isTiming ? (new Date() - toValidDate(subtask.lastStartTime)) : 0);
 
                  return `
                  <div class="wip-item py-2 border-b border-gray-700 last:border-b-0" data-id="${task.id}" data-subtask-id="${subtask.id}">
@@ -1906,7 +2099,7 @@
                 return;
             }
 
-            const validCreationDates = tasksToRender.map(t => new Date(t.createdAt)).filter(d => !isNaN(d.getTime()));
+            const validCreationDates = tasksToRender.map(t => toValidDate(t.createdAt)).filter(d => d);
             if (validCreationDates.length === 0) {
                 createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', { labels: [], datasets: [] });
                 return;
@@ -1938,21 +2131,21 @@
             });
 
             leadTimeTasks.forEach(task => {
-                const week = getWeekLabel(new Date(task.completedAt));
+                const week = getWeekLabel(toValidDate(task.completedAt));
                 if (weeklyMetrics[week]) {
-                    weeklyMetrics[week].leadTimes.push((new Date(task.completedAt) - new Date(task.createdAt)) / msPerDay);
+                    weeklyMetrics[week].leadTimes.push((toValidDate(task.completedAt) - toValidDate(task.createdAt)) / msPerDay);
                 }
             });
 
             cycleTimeTasks.forEach(task => {
-                const week = getWeekLabel(new Date(task.completedAt));
+                const week = getWeekLabel(toValidDate(task.completedAt));
                 if (weeklyMetrics[week]) {
-                    weeklyMetrics[week].cycleTimes.push((new Date(task.completedAt) - new Date(task.startedAt)) / msPerDay);
+                    weeklyMetrics[week].cycleTimes.push((toValidDate(task.completedAt) - toValidDate(task.startedAt)) / msPerDay);
                 }
             });
 
             throughputTasks.forEach(task => {
-                const week = getWeekLabel(new Date(task.completedAt));
+                const week = getWeekLabel(toValidDate(task.completedAt));
                 if (weeklyMetrics[week]) {
                     weeklyMetrics[week].count++;
                 }
@@ -1960,12 +2153,12 @@
 
             const avgLeadTimes = allWeeklyLabels.map(label => {
                 const weekData = weeklyMetrics[label];
-                if (!weekData || weekData.leadTimes.length === 0) return 0; // CORREÇÃO: Retorna 0 em vez de null
+                if (!weekData || weekData.leadTimes.length === 0) return 0;
                 return (weekData.leadTimes.reduce((a, b) => a + b, 0) / weekData.leadTimes.length).toFixed(1);
             });
             const avgCycleTimes = allWeeklyLabels.map(label => {
                 const weekData = weeklyMetrics[label];
-                if (!weekData || weekData.cycleTimes.length === 0) return 0; // CORREÇÃO: Retorna 0 em vez de null
+                if (!weekData || weekData.cycleTimes.length === 0) return 0;
                 return (weekData.cycleTimes.reduce((a, b) => a + b, 0) / weekData.cycleTimes.length).toFixed(1);
             });
             const throughputData = allWeeklyLabels.map(label => weeklyMetrics[label] ? weeklyMetrics[label].count : 0);
@@ -1974,8 +2167,8 @@
                 labels: allWeeklyLabels,
                 datasets: [
                     { label: 'Vazão (itens)', data: throughputData, type: 'bar', backgroundColor: 'rgba(16, 185, 129, 0.5)', borderColor: 'rgba(16, 185, 129, 1)', yAxisID: 'y1', order: 2 },
-                    { label: 'Lead Time Médio (dias)', data: avgLeadTimes, borderColor: '#a78bfa', backgroundColor: '#a78bfa', tension: 0.2, type: 'line', yAxisID: 'y', order: 1, spanGaps: false }, // CORREÇÃO: spanGaps volta a ser false
-                    { label: 'Cycle Time Médio (dias)', data: avgCycleTimes, borderColor: '#60a5fa', backgroundColor: '#60a5fa', tension: 0.2, type: 'line', yAxisID: 'y', order: 0, spanGaps: false }  // CORREÇÃO: spanGaps volta a ser false
+                    { label: 'Lead Time Médio (dias)', data: avgLeadTimes, borderColor: '#a78bfa', backgroundColor: '#a78bfa', tension: 0.2, type: 'line', yAxisID: 'y', order: 1, spanGaps: false },
+                    { label: 'Cycle Time Médio (dias)', data: avgCycleTimes, borderColor: '#60a5fa', backgroundColor: '#60a5fa', tension: 0.2, type: 'line', yAxisID: 'y', order: 0, spanGaps: false }
                 ]
             };
             createOrUpdateChart('timeEvolutionChart', 'line', 'Evolução Semanal: Vazão, Lead Time e Cycle Time', data, {
@@ -1988,7 +2181,7 @@
 
          const populateTimeLogWeekSelector = () => {
              const selector = elements.timeLogWeekSelector;
-             const allWeeks = [...new Set(timeLog.map(log => getWeekLabel(new Date(log.timestamp))))].sort(sortWeekLabels).reverse();
+             const allWeeks = [...new Set(timeLog.map(log => getWeekLabel(toValidDate(log.timestamp))))].sort(sortWeekLabels).reverse();
 
              if (allWeeks.length === 0) {
                  selector.innerHTML = `<option value="">Sem dados de tempo</option>`;
@@ -2007,7 +2200,7 @@
                  createOrUpdateChart('processHoursChart', 'bar', 'Horas Investidas por Processo', { labels: [], datasets: [] });
                  return;
              }
-             const weeklyLogs = timeLog.filter(log => getWeekLabel(new Date(log.timestamp)) === selectedWeek);
+             const weeklyLogs = timeLog.filter(log => getWeekLabel(toValidDate(log.timestamp)) === selectedWeek);
 
              const dataByCollaborator = {};
              const allProcesses = [...new Set(weeklyLogs.map(log => log.process || 'Não Definido'))];
@@ -2125,92 +2318,96 @@
          };
 
          const renderDashboard = (tasksToRender) => {
-             processColorMap.clear();
-             nextColorIndex = 0;
+     processColorMap.clear();
+     nextColorIndex = 0;
 
-             if (tasksToRender.length === 0) {
-                 elements.kpis.cycleTime.textContent = '-- dias';
-                 elements.kpis.leadTime.textContent = '-- dias';
-                 elements.kpis.throughput.textContent = '-- itens';
-             } else {
-                 const msPerDay = 86400000;
-                 const leadTimeTasks = tasksToRender.filter(t => t.completedAt && t.createdAt);
-                 let totalLeadTime = 0;
-                 leadTimeTasks.forEach(t => {
-                     totalLeadTime += new Date(t.completedAt) - new Date(t.createdAt);
-                 });
-                 elements.kpis.leadTime.textContent = `${leadTimeTasks.length > 0 ? (totalLeadTime / leadTimeTasks.length / msPerDay).toFixed(1) : '--'} dias`;
+     if (tasksToRender.length === 0) {
+         elements.kpis.cycleTime.textContent = '-- dias';
+         elements.kpis.leadTime.textContent = '-- dias';
+         elements.kpis.throughput.textContent = '-- itens';
+     } else {
+         const msPerDay = 86400000;
+         const leadTimeTasks = tasksToRender.filter(t => t.completedAt && t.createdAt);
+         let totalLeadTime = 0;
+         leadTimeTasks.forEach(t => {
+             totalLeadTime += toValidDate(t.completedAt) - toValidDate(t.createdAt);
+         });
+         elements.kpis.leadTime.textContent = `${leadTimeTasks.length > 0 ? (totalLeadTime / leadTimeTasks.length / msPerDay).toFixed(1) : '--'} dias`;
 
-                 const startedAndCompletedTasks = tasksToRender.filter(t => t.startedAt && t.completedAt);
-                 let totalCycleTime = 0;
-                 startedAndCompletedTasks.forEach(t => {
-                     totalCycleTime += new Date(t.completedAt) - new Date(t.startedAt);
-                 });
-                 elements.kpis.cycleTime.textContent = `${startedAndCompletedTasks.length > 0 ? (totalCycleTime / startedAndCompletedTasks.length / msPerDay).toFixed(1) : '--'} dias`;
+         const startedAndCompletedTasks = tasksToRender.filter(t => t.startedAt && t.completedAt);
+         let totalCycleTime = 0;
+         startedAndCompletedTasks.forEach(t => {
+             totalCycleTime += toValidDate(t.completedAt) - toValidDate(t.startedAt);
+         });
+         elements.kpis.cycleTime.textContent = `${startedAndCompletedTasks.length > 0 ? (totalCycleTime / startedAndCompletedTasks.length / msPerDay).toFixed(1) : '--'} dias`;
 
-                 const sevenDaysAgo = new Date(Date.now() - 7 * msPerDay);
-                 elements.kpis.throughput.textContent = `${tasksToRender.filter(t => t.completedAt && new Date(t.completedAt) >= sevenDaysAgo).length} itens`;
-             }
+         // << INÍCIO DA MELHORIA 2: Correção do cálculo de datas para incluir o dia de hoje >>
+         const sevenDaysAgo = new Date();
+         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // Configura para 6 dias atrás (totalizando 7 dias com hoje)
+         sevenDaysAgo.setHours(0, 0, 0, 0); // Define para o início daquele dia para garantir a contagem correta
+         elements.kpis.throughput.textContent = `${tasksToRender.filter(t => t.completedAt && toValidDate(t.completedAt) >= sevenDaysAgo).length} itens`;
+         // << FIM DA MELHORIA 2 >>
+     }
 
-             renderWipTracker(tasksToRender);
-             renderCumulativeFlowDiagram();
-             renderTimeEvolutionChart(tasksToRender);
-             populateTimeLogWeekSelector();
-             renderTimeLogCharts();
+     renderWipTracker(tasksToRender);
+     renderCumulativeFlowDiagram(tasksToRender);
+     renderTimeEvolutionChart(tasksToRender);
+     populateTimeLogWeekSelector();
+     renderTimeLogCharts();
 
-             if (currentView === 'manager') {
-                renderEffortAnalysisChart(tasksToRender);
-                renderEfficiencyChart(tasksToRender);
-             } else {
-                 if (chartObjects.effortAnalysisChart) { chartObjects.effortAnalysisChart.destroy(); delete chartObjects.effortAnalysisChart; }
-                 if (chartObjects.efficiencyChart) { chartObjects.efficiencyChart.destroy(); delete chartObjects.efficiencyChart; }
-             }
+     if (currentView === 'manager') {
+        renderEffortAnalysisChart(tasksToRender);
+        renderEfficiencyChart(tasksToRender);
+     } else {
+         if (chartObjects.effortAnalysisChart) { chartObjects.effortAnalysisChart.destroy(); delete chartObjects.effortAnalysisChart; }
+         if (chartObjects.efficiencyChart) { chartObjects.efficiencyChart.destroy(); delete chartObjects.efficiencyChart; }
+     }
 
-             const responsibleCounts = tasksToRender.filter(t => t.responsible).reduce((acc, task) => ({ ...acc,
-                 [task.responsible]: (acc[task.responsible] || 0) + 1
-             }), {});
-             const sortedResponsaveis = Object.entries(responsibleCounts).sort((a, b) => a[1] - b[1]).slice(-10);
-             createOrUpdateChart('responsaveisChart', 'bar', 'Demandas por Responsável (Top 10)', {
-                 labels: sortedResponsaveis.map(item => item[0]),
-                 datasets: [{
-                     label: 'Nº de Demandas',
-                     data: sortedResponsaveis.map(item => item[1]),
-                     backgroundColor: '#60a5fa'
-                 }]
-             }, {
-                 indexAxis: 'y',
-                 plugins: { legend: { display: false } }
-             });
+     const responsibleCounts = tasksToRender.filter(t => t.responsible).reduce((acc, task) => ({ ...acc,
+         [task.responsible]: (acc[task.responsible] || 0) + 1
+     }), {});
+     const sortedResponsaveis = Object.entries(responsibleCounts).sort((a, b) => a[1] - b[1]).slice(-10);
+     createOrUpdateChart('responsaveisChart', 'bar', 'Demandas por Responsável (Top 10)', {
+         labels: sortedResponsaveis.map(item => item[0]),
+         datasets: [{
+             label: 'Nº de Demandas',
+             data: sortedResponsaveis.map(item => item[1]),
+             backgroundColor: '#60a5fa'
+         }]
+     }, {
+         indexAxis: 'y',
+         plugins: { legend: { display: false } }
+     });
 
-             const statusCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({ ...acc,
-                 [status]: tasksToRender.filter(t => t.status === status).length
-             }), {});
-             createOrUpdateChart('statusDistributionChart', 'radar', 'Distribuição de Demandas por Status', {
-                 labels: Object.values(STATUS_OPTIONS),
-                 datasets: [{
-                     label: 'Nº de Demandas',
-                     data: Object.values(statusCounts),
-                     backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                     borderColor: 'rgba(54, 162, 235, 1)',
-                     pointBackgroundColor: 'rgba(54, 162, 235, 1)',
-                     pointBorderColor: '#fff',
-                     pointHoverBackgroundColor: '#fff',
-                     pointHoverBorderColor: 'rgba(54, 162, 235, 1)',
-                     fill: true
-                 }]
-             });
+     const statusCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({ ...acc,
+         [status]: tasksToRender.filter(t => t.status === status).length
+     }), {});
+     createOrUpdateChart('statusDistributionChart', 'radar', 'Distribuição de Demandas por Status', {
+         labels: Object.values(STATUS_OPTIONS),
+         datasets: [{
+             label: 'Nº de Demandas',
+             data: Object.values(statusCounts),
+             backgroundColor: 'rgba(54, 162, 235, 0.2)',
+             borderColor: 'rgba(54, 162, 235, 1)',
+             pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+             pointBorderColor: '#fff',
+             pointHoverBackgroundColor: '#fff',
+             pointHoverBorderColor: 'rgba(54, 162, 235, 1)',
+             fill: true
+         }]
+     });
 
-             const nucleusCounts = tasksToRender.filter(t => t.nucleus).reduce((acc, task) => ({ ...acc,
-                 [task.nucleus]: (acc[task.nucleus] || 0) + 1
-             }), {});
-             createOrUpdateChart('nucleoChart', 'doughnut', 'Demandas por Núcleo', {
-                 labels: Object.keys(nucleusCounts),
-                 datasets: [{
-                     data: Object.values(nucleusCounts),
-                     backgroundColor: ['#6366f1', '#f59e0b', '#10b981']
-                 }]
-             });
-         };
+     const nucleusCounts = tasksToRender.filter(t => t.nucleus).reduce((acc, task) => ({ ...acc,
+         [task.nucleus]: (acc[task.nucleus] || 0) + 1
+     }), {});
+     createOrUpdateChart('nucleoChart', 'doughnut', 'Demandas por Núcleo', {
+         labels: Object.keys(nucleusCounts),
+         datasets: [{
+             data: Object.values(nucleusCounts),
+             backgroundColor: ['#6366f1', '#f59e0b', '#10b981']
+         }]
+     });
+};
 
          const createOrUpdateChart = (canvasId, type, title, data, customOptions = {}) => {
              const ctx = document.getElementById(canvasId);
@@ -2227,10 +2424,11 @@
              chartObjects[canvasId] = new Chart(ctx.getContext('2d'), { type, data, options });
          };
 
-         const generateHistoricalCfdData = (importedTasks) => {
-             if (importedTasks.length === 0) return [];
-             const validCreationDates = importedTasks.map(t => new Date(t.createdAt)).filter(d => !isNaN(d.getTime()));
+         const generateHistoricalCfdData = (currentTasks) => {
+             if (currentTasks.length === 0) return [];
+             const validCreationDates = currentTasks.map(t => toValidDate(t.createdAt)).filter(d => d);
              if (validCreationDates.length === 0) return [];
+             
              const earliestDate = new Date(Math.min(...validCreationDates));
              const today = new Date();
              let historyData = [];
@@ -2238,11 +2436,12 @@
              for (let d = new Date(earliestDate); d <= today; d.setDate(d.getDate() + 1)) {
                  const currentDate = new Date(d); currentDate.setHours(23, 59, 59, 999);
                  const dailyCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({ ...acc, [status]: 0 }), {});
-                 importedTasks.forEach(task => {
-                     const taskCreatedAt = new Date(task.createdAt);
-                     if (isNaN(taskCreatedAt.getTime()) || taskCreatedAt > currentDate) return;
-
-                     const taskCompletedAt = task.completedAt ? new Date(task.completedAt) : null;
+                 
+                 currentTasks.forEach(task => {
+                     const taskCreatedAt = toValidDate(task.createdAt);
+                     if (!taskCreatedAt || taskCreatedAt > currentDate) return;
+                     
+                     const taskCompletedAt = toValidDate(task.completedAt);
                      if(taskCompletedAt && taskCompletedAt <= currentDate) {
                          dailyCounts.concluido++;
                      } else {
@@ -2253,35 +2452,23 @@
              }
              return historyData;
          };
-
-         const updateHistory = () => {
-             const today = new Date().toISOString().split('T')[0];
-             const lastHistoryEntry = history.length > 0 ? history[history.length - 1] : null;
-             const dailyCounts = Object.keys(STATUS_OPTIONS).reduce((acc, status) => ({ ...acc,
-                 [status]: tasks.filter(t => t.status === status).length
-             }), {});
-
-             if (lastHistoryEntry && lastHistoryEntry.date === today) {
-                 history[history.length - 1] = { date: today, ...dailyCounts };
-             } else if (!lastHistoryEntry || new Date(lastHistoryEntry.date) < new Date(today)) {
-                 history.push({ date: today, ...dailyCounts });
-             }
-         };
-
-         const renderCumulativeFlowDiagram = () => {
+         
+         const renderCumulativeFlowDiagram = (tasksForCfd) => {
              if (!document.getElementById('cumulativeFlowChart')) return;
-             if(history.length === 0) {
+             
+             const historyData = generateHistoricalCfdData(tasksForCfd);
+
+             if(historyData.length === 0) {
                  createOrUpdateChart('cumulativeFlowChart', 'line', 'Diagrama de Fluxo Cumulativo (CFD) - Semanal', { labels: [], datasets: [] });
                  return;
              }
-             const allWeeklyLabels = [...new Set(history.map(day => getWeekLabel(new Date(day.date))))].sort(sortWeekLabels);
+             const allWeeklyLabels = [...new Set(historyData.map(day => getWeekLabel(new Date(day.date))))].sort(sortWeekLabels);
              const weeklyData = {};
-             history.forEach(day => {
+             historyData.forEach(day => {
                 const week = getWeekLabel(new Date(day.date));
-                if(!weeklyData[week]) {
-                    weeklyData[week] = day;
-                }
+                weeklyData[week] = day;
              });
+
              if (allWeeklyLabels.length < 1) {
                  createOrUpdateChart('cumulativeFlowChart', 'line', 'Diagrama de Fluxo Cumulativo (CFD) - Semanal', { labels: [], datasets: [] });
                  return;
@@ -2367,9 +2554,7 @@
              modal.status.innerHTML = Object.entries(STATUS_OPTIONS).map(([key, value]) => `<option value="${key}">${value}</option>`).join('');
 
              modal.planOptions.innerHTML = planOptions.map(p => `<option value="${p}"></option>`).join('');
-
              modal.feederOptions.innerHTML = alimentadoresData.map(a => `<option value="${a.Alimentador}"></option>`).join('');
-
              modal.subtasks.catalogSelect.innerHTML = Object.keys(activityCatalog)
                 .map(name => `<option value="${name}">${name}</option>`).join('');
 
@@ -2410,20 +2595,23 @@
                     modal.utd.value = alimentadorInfo.UTD || '';
                     modal.setor.value = alimentadorInfo.Setor || '';
                     modal.superintendencia.value = alimentadorInfo.Superintendência || '';
+                } else {
+                    modal.municipio.value = '';
+                    modal.utd.value = '';
+                    modal.setor.value = '';
+                    modal.superintendencia.value = '';
                 }
 
                  modal.completionDate.value = toDateTimeLocal(task.completedAt);
-
                  modal.critScore.textContent = (task.scoreGUT || task.scoreRICE || 0).toFixed(1);
                  modal.critReclamacoes.textContent = task.reclamacoes30d || 0;
                  modal.critPrazo.textContent = formatDate(task.createdAt);
-
                  modal.gut.g.value = task.gut?.g || '';
                  modal.gut.u.value = task.gut?.u || '';
                  modal.gut.t.value = task.gut?.t || '';
                  modal.deleteBtn.classList.remove('hidden');
-
                  renderSubtasks(task);
+
              } else {
                  const allIdRefs = tasks.map(t => parseInt(t.originalId, 10)).filter(id => !isNaN(id));
                  const maxIdRef = allIdRefs.length > 0 ? Math.max(...allIdRefs) : 0;
@@ -2435,11 +2623,9 @@
                  modal.status.value = 'triagem';
                  modal.creator.value = currentUserMatricula;
                  modal.creationDate.value = toDateTimeLocal(new Date().toISOString());
-
                  modal.critScore.textContent = '--';
                  modal.critReclamacoes.textContent = '--';
                  modal.critPrazo.textContent = '--';
-
                  modal.deleteBtn.classList.add('hidden');
                  elements.modal.subtasks.list.innerHTML = '<p class="text-gray-500 text-sm text-center py-2">Nenhuma sub-atividade adicionada.</p>';
              }
@@ -2456,16 +2642,11 @@
              isEditingModal = false;
          };
 
-         const handleFormSubmit = (e) => {
+         const handleFormSubmit = async (e) => {
              e.preventDefault();
              const { modal } = elements;
-             const id = modal.id.value;
-             let task = id ? tasks.find(t => t.id === id) : null;
-
-             const getGUTValue = (elementId) => {
-                const value = parseInt(document.getElementById(elementId).value, 10);
-                return isNaN(value) ? 0 : value;
-             };
+             const taskId = modal.id.value;
+             let task = taskId ? tasks.find(t => t.id === taskId) : null;
 
              if (task && task.status !== 'concluido' && modal.status.value === 'concluido' && task.subtasks && task.subtasks.some(st => st.status !== 'completed')) {
                  alert("Ação bloqueada: Para mover um card para 'Concluído', todas as suas sub-atividades devem estar concluídas.");
@@ -2473,122 +2654,156 @@
                  return;
              }
 
+             const getGUTValue = (elementId) => {
+                const value = parseInt(document.getElementById(elementId).value, 10);
+                return isNaN(value) ? 0 : value;
+             };
+
              const newPlan = modal.plan.value.trim();
              if (newPlan && !planOptions.includes(newPlan)) {
                 planOptions.push(newPlan);
                 planOptions.sort();
              }
 
-             if (task) {
-                 const oldStatus = task.status;
-                 task.title = modal.demandTitle.value;
-                 task.status = modal.status.value;
-                 task.responsible = modal.responsible.value;
-                 task.createdAt = new Date(modal.creationDate.value).toISOString();
-                 task.nucleus = modal.nucleus.value;
-                 task.description = modal.description.value;
-                 task.demandType = modal.type.value;
+            let dataToSave = {};
+            const creationDate = new Date(modal.creationDate.value);
+            const deadlineDate = modal.deadline.value ? new Date(modal.deadline.value) : null;
+            const completionDate = modal.completionDate.value ? new Date(modal.completionDate.value) : null;
 
-                 Object.assign(task.originalData, {
-                    'Título': task.title,
-                    'Atribuído a': task.responsible,
-                    'Criado_GD': new Date(task.createdAt),
-                    'Núcleo': task.nucleus,
-                    'Plano': newPlan,
-                    'Prazo': modal.deadline.value ? new Date(modal.deadline.value) : null,
-                    'Solicitado por': modal.requester.value,
-                    'Área do Solicitante': modal.requesterArea.value,
-                    'Conta Contrato': modal.contract.value,
-                    'Alimentador': modal.feeder.value,
-                    'Título e-mail Relacionado': modal.relatedEmail.value,
-                    'Diagnóstico': modal.diagnosis.value,
-                    'Descrição': task.description,
-                    'Status': STATUS_TO_SHEET_MAP[task.status] || task.status,
-                    'Gravidade (GUT)': `Gravidade (${getGUTValue('gut-g')})`,
-                    'Urgência (GUT)': `Urgência (${getGUTValue('gut-u')})`,
-                    'Tendência (GUT)': `Tendência (${getGUTValue('gut-t')})`
-                 });
+            const newStatus = modal.status.value;
+            if (task && task.status === 'andamento' && newStatus !== 'andamento') {
+                const runningSubtaskIndex = task.subtasks?.findIndex(st => st.isTiming);
 
-                 if (task.demandType === 'problema') {
-                     task.gut = { g: getGUTValue('gut-g'), u: getGUTValue('gut-u'), t: getGUTValue('gut-t') };
-                     task.scoreGUT = calculateGUT(false); task.scoreRICE = null;
-                 } else if (task.demandType === 'melhoria') {
-                     task.rice = { reach: parseInt(modal.rice.reach.value) || 0, impact: parseFloat(modal.rice.impact.value) || 0, confidence: parseFloat(modal.rice.confidence.value) || 0, effort: parseFloat(modal.rice.effort.value) || 1 };
-                     task.scoreRICE = calculateRICE(false); task.scoreGUT = null; task.gut = {};
-                 }
+                if (runningSubtaskIndex > -1) {
+                    console.log("Pausando sub-atividade devido à mudança de status.");
+                    const elapsed = new Date() - toValidDate(task.subtasks[runningSubtaskIndex].lastStartTime);
+                    
+                    task.subtasks[runningSubtaskIndex].timeSpent += elapsed;
+                    task.subtasks[runningSubtaskIndex].isTiming = false;
+                    task.subtasks[runningSubtaskIndex].lastStartTime = null;
 
-                 if (oldStatus === 'triagem' && (task.scoreGUT > 0 || task.scoreRICE > 0)) {
-                     task.status = 'backlog';
-                 }
+                    task.timeSpent = task.subtasks.reduce((total, sub) => total + sub.timeSpent, 0);
 
-                 if (task.status === 'concluido') {
-                     if (modal.completionDate.value) {
-                         task.completedAt = new Date(modal.completionDate.value).toISOString();
-                     } else if (oldStatus !== 'concluido') {
-                         task.completedAt = new Date().toISOString();
-                     }
-                     task.originalData['Data de Conclusão'] = task.completedAt ? new Date(task.completedAt) : null;
-                 } else {
-                     task.completedAt = null;
-                     task.originalData['Data de Conclusão'] = null;
-                 }
-                 if (oldStatus !== 'andamento' && task.status === 'andamento' && !task.startedAt) task.startedAt = new Date().toISOString();
+                    if (elapsed > 1000) {
+                        const catalogEntry = activityCatalog[task.subtasks[runningSubtaskIndex].name] || {};
+                        const timeLogRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'time_log');
+                        addDoc(timeLogRef, {
+                            timestamp: new Date(),
+                            responsible: task.responsible,
+                            process: catalogEntry.process || 'Não Definido',
+                            duration: elapsed
+                        });
+                    }
+                }
+            }
 
-             } else {
-                 const originalId = modal.idRef.value;
-                 task = {
-                     id: `manual-${Date.now()}`,
-                     originalId: originalId,
-                     createdAt: new Date(modal.creationDate.value).toISOString(),
-                     title: modal.demandTitle.value,
-                     status: modal.status.value,
-                     responsible: modal.responsible.value,
-                     nucleus: modal.nucleus.value,
-                     description: modal.description.value,
-                     demandType: modal.type.value,
-                     timeSpent: 0, isTiming: false, lastStartTime: null, playCount: 0,
-                     subtasks: [], lastActiveSubtaskId: null, expectedTime: 0,
-                     originalData: {
-                         'ID_REF': originalId,
-                         'Criado por': currentUserMatricula,
-                         'Título': modal.demandTitle.value,
-                         'Atribuído a': modal.responsible.value,
-                         'Criado_GD': new Date(modal.creationDate.value),
-                         'Núcleo': modal.nucleus.value,
-                         'Plano': newPlan,
-                         'Prazo': modal.deadline.value ? new Date(modal.deadline.value) : null,
-                         'Solicitado por': modal.requester.value,
-                         'Área do Solicitante': modal.requesterArea.value,
-                         'Conta Contrato': modal.contract.value,
-                         'Alimentador': modal.feeder.value,
-                         'Título e-mail Relacionado': modal.relatedEmail.value,
-                         'Diagnóstico': modal.diagnosis.value,
-                         'Descrição': modal.description.value,
-                         'Status': STATUS_TO_SHEET_MAP[modal.status.value] || modal.status.value,
-                         'Gravidade (GUT)': `Gravidade (${getGUTValue('gut-g')})`,
-                         'Urgência (GUT)': `Urgência (${getGUTValue('gut-u')})`,
-                         'Tendência (GUT)': `Tendência (${getGUTValue('gut-t')})`
-                     }
+            if (task) { // Atualizando uma tarefa existente
+                dataToSave = {
+                    title: modal.demandTitle.value,
+                    status: newStatus, 
+                    responsible: modal.responsible.value,
+                    createdAt: creationDate,
+                    nucleus: modal.nucleus.value,
+                    description: modal.description.value,
+                    demandType: modal.type.value,
+                    subtasks: task.subtasks, 
+                    timeSpent: task.timeSpent, 
+                    originalData: {
+                        ...task.originalData,
+                        'Título': modal.demandTitle.value,
+                        'Atribuído a': modal.responsible.value,
+                        'Criado_GD': creationDate,
+                        'Núcleo': modal.nucleus.value,
+                        'Plano': newPlan,
+                        'Prazo': deadlineDate,
+                        'Solicitado por': modal.requester.value,
+                        'Área do Solicitante': modal.requesterArea.value,
+                        'Conta Contrato': modal.contract.value,
+                        'Alimentador': modal.feeder.value,
+                        'Título e-mail Relacionado': modal.relatedEmail.value,
+                        'Diagnóstico': modal.diagnosis.value,
+                        'Descrição': modal.description.value,
+                        'Status': STATUS_TO_SHEET_MAP[newStatus] || newStatus,
+                        'Gravidade (GUT)': `Gravidade (${getGUTValue('gut-g')})`,
+                        'Urgência (GUT)': `Urgência (${getGUTValue('gut-u')})`,
+                        'Tendência (GUT)': `Tendência (${getGUTValue('gut-t')})`
+                    }
+                };
+                
+                if (dataToSave.demandType === 'problema') {
+                    dataToSave.gut = { g: getGUTValue('gut-g'), u: getGUTValue('gut-u'), t: getGUTValue('gut-t') };
+                    dataToSave.scoreGUT = calculateGUT(false);
+                    dataToSave.scoreRICE = null;
+                } else if (dataToSave.demandType === 'melhoria') {
+                    dataToSave.rice = { reach: parseInt(modal.rice.reach.value) || 0, impact: parseFloat(modal.rice.impact.value) || 0, confidence: parseFloat(modal.rice.confidence.value) || 0, effort: parseFloat(modal.rice.effort.value) || 1 };
+                    dataToSave.scoreRICE = calculateRICE(false);
+                    dataToSave.scoreGUT = null;
+                    dataToSave.gut = {};
+                }
+
+                if (task.status === 'triagem' && (dataToSave.scoreGUT > 0 || dataToSave.scoreRICE > 0)) {
+                     dataToSave.status = 'backlog';
+                }
+
+                if (dataToSave.status === 'concluido') {
+                    if (completionDate) dataToSave.completedAt = completionDate;
+                    else if (task.status !== 'concluido') dataToSave.completedAt = new Date();
+                    dataToSave.originalData['Data de Conclusão'] = dataToSave.completedAt;
+                } else {
+                    dataToSave.completedAt = null;
+                    dataToSave.originalData['Data de Conclusão'] = null;
+                }
+                
+                if (task.status !== 'andamento' && dataToSave.status === 'andamento' && !task.startedAt) {
+                    dataToSave.startedAt = new Date();
+                }
+
+                const taskRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks', taskId);
+                await updateDoc(taskRef, dataToSave);
+
+            } else { // Criando uma nova tarefa
+                const originalId = modal.idRef.value;
+                 dataToSave = {
+                    originalId: originalId,
+                    createdAt: creationDate,
+                    title: modal.demandTitle.value,
+                    status: newStatus,
+                    responsible: modal.responsible.value,
+                    nucleus: modal.nucleus.value,
+                    description: modal.description.value,
+                    demandType: modal.type.value,
+                    timeSpent: 0, isTiming: false, lastStartTime: null, playCount: 0,
+                    subtasks: [], lastActiveSubtaskId: null, expectedTime: 0,
+                    completedAt: null, startedAt: null, gut: {}, reclamacoes30d: 0,
+                    originalData: {
+                         'ID_REF': originalId, 'Criado por': currentUserMatricula, 'Título': modal.demandTitle.value,
+                         'Atribuído a': modal.responsible.value, 'Criado_GD': creationDate,
+                         'Núcleo': modal.nucleus.value, 'Plano': newPlan,
+                         'Prazo': deadlineDate,
+                         'Solicitado por': modal.requester.value, 'Área do Solicitante': modal.requesterArea.value,
+                         'Conta Contrato': modal.contract.value, 'Alimentador': modal.feeder.value,
+                         'Título e-mail Relacionado': modal.relatedEmail.value, 'Diagnóstico': modal.diagnosis.value,
+                         'Descrição': modal.description.value, 'Status': STATUS_TO_SHEET_MAP[newStatus] || newStatus,
+                         'Gravidade (GUT)': `Gravidade (${getGUTValue('gut-g')})`, 'Urgência (GUT)': `Urgência (${getGUTValue('gut-u')})`, 'Tendência (GUT)': `Tendência (${getGUTValue('gut-t')})`
+                    }
                  };
 
-                 if (task.demandType === 'problema') {
-                     task.gut = { g: getGUTValue('gut-g'), u: getGUTValue('gut-u'), t: getGUTValue('gut-t') };
-                     task.scoreGUT = calculateGUT(false);
-                 } else if (task.demandType === 'melhoria') {
-                     task.rice = { reach: parseInt(modal.rice.reach.value) || 0, impact: parseFloat(modal.rice.impact.value) || 0, confidence: parseFloat(modal.rice.confidence.value) || 0, effort: parseFloat(modal.rice.effort.value) || 1 };
-                     task.scoreRICE = calculateRICE(false);
+                 if (dataToSave.demandType === 'problema') {
+                     dataToSave.gut = { g: getGUTValue('gut-g'), u: getGUTValue('gut-u'), t: getGUTValue('gut-t') };
+                     dataToSave.scoreGUT = calculateGUT(false);
+                 } else if (dataToSave.demandType === 'melhoria') {
+                     dataToSave.rice = { reach: parseInt(modal.rice.reach.value) || 0, impact: parseFloat(modal.rice.impact.value) || 0, confidence: parseFloat(modal.rice.confidence.value) || 0, effort: parseFloat(modal.rice.effort.value) || 1 };
+                     dataToSave.scoreRICE = calculateRICE(false);
                  }
-                 if (task.status === 'triagem' && (task.scoreGUT > 0 || task.scoreRICE > 0)) {
-                     task.status = 'backlog';
+                 if (dataToSave.status === 'triagem' && (dataToSave.scoreGUT > 0 || dataToSave.scoreRICE > 0)) {
+                     dataToSave.status = 'backlog';
                  }
-                 tasks.push(task);
-             }
 
-             updateHistory();
-             saveState().then(() => {
-                closeModal();
-                renderActiveTabView();
-             });
+                 const tasksCollectionRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks');
+                 await addDoc(tasksCollectionRef, dataToSave);
+            }
+             
+            closeModal();
          };
 
          const calculateGUT = (render = true) => {
@@ -2618,122 +2833,139 @@
          };
 
         const handleGlobalPlay = (taskId, subtaskId) => {
-            const taskToPlay = tasks.find(t => t.id === taskId);
-            if (!taskToPlay) return;
+    const taskToPlay = tasks.find(t => t.id === taskId);
+    if (!taskToPlay) return;
 
-            if (taskToPlay.responsible) {
-                const responsible = taskToPlay.responsible;
-                const isAlreadyWorking = tasks.some(task =>
-                    task.responsible === responsible &&
-                    task.id !== taskId &&
-                    task.subtasks &&
-                    task.subtasks.some(subtask => subtask.isTiming)
-                );
-                if (isAlreadyWorking) {
-                    alert("Atenção: Você já possui outra atividade em andamento. Pause a atividade atual antes de iniciar uma nova.");
-                    return;
-                }
-            }
+    if (taskToPlay.responsible) {
+        const responsible = taskToPlay.responsible;
+        // << INÍCIO DA CORREÇÃO 1: Garante que apenas um clock esteja ativo por colaborador em todo o sistema >>
+        const isAlreadyWorking = tasks.some(task =>
+            task.responsible === responsible &&
+            task.subtasks &&
+            task.subtasks.some(subtask => subtask.isTiming)
+        );
+        if (isAlreadyWorking) {
+            alert(`Atenção: O colaborador ${responsible} já possui outra atividade em andamento. Pause a atividade atual antes de iniciar uma nova.`);
+            return;
+        }
+        // << FIM DA CORREÇÃO 1 >>
+    }
+    handlePlay(taskId, subtaskId);
+};
 
-            handlePlay(taskId, subtaskId);
-        };
+    const handlePlay = async (taskId, subtaskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    const subtaskIndex = task?.subtasks.findIndex(st => st.id === subtaskId);
+    if (!task || subtaskIndex === -1 || task.subtasks[subtaskIndex].isTiming) return;
 
-        const handlePlay = (taskId, subtaskId) => {
+    const updatedSubtasks = [...task.subtasks];
+    updatedSubtasks[subtaskIndex].isTiming = true;
+    updatedSubtasks[subtaskIndex].lastStartTime = new Date().toISOString();
+
+    let dataToUpdate = {
+        subtasks: updatedSubtasks,
+        playCount: (task.playCount || 0) + 1,
+        lastActiveSubtaskId: subtaskId
+    };
+    
+    if (task.status !== 'andamento') {
+        dataToUpdate.status = 'andamento';
+        dataToUpdate.originalData = { ...task.originalData, 'Status': STATUS_TO_SHEET_MAP['andamento'] };
+        
+        // << INÍCIO DA MELHORIA 2: Atualiza o status no modal se ele estiver aberto >>
+        if (isEditingModal && elements.modal.id.value === taskId) {
+            elements.modal.status.value = 'andamento';
+        }
+        // << FIM DA MELHORIA 2 >>
+    }
+
+    if (!task.startedAt) {
+        dataToUpdate.startedAt = new Date(updatedSubtasks[subtaskIndex].lastStartTime);
+    }
+
+    const taskRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks', taskId);
+    await updateDoc(taskRef, dataToUpdate);
+
+    const updatedTask = { ...task, ...dataToUpdate };
+    renderSubtasks(updatedTask);
+};
+
+        const handlePause = async (taskId, subtaskId) => {
             const task = tasks.find(t => t.id === taskId);
-            const subtask = task?.subtasks.find(st => st.id === subtaskId);
-            if (subtask && !subtask.isTiming) {
-                task.playCount = (task.playCount || 0) + 1;
-                if(task.status !== 'andamento') {
-                    task.status = 'andamento';
-                    task.originalData['Status'] = STATUS_TO_SHEET_MAP['andamento'];
-                }
-                subtask.isTiming = true;
-                subtask.lastStartTime = new Date().toISOString();
-                if (!task.startedAt) task.startedAt = subtask.lastStartTime;
+            const subtaskIndex = task?.subtasks.findIndex(st => st.id === subtaskId);
+            if (!task || subtaskIndex === -1 || !task.subtasks[subtaskIndex].isTiming) return;
+            
+            const elapsed = new Date() - toValidDate(task.subtasks[subtaskIndex].lastStartTime);
+            
+            const updatedSubtasks = [...task.subtasks];
+            updatedSubtasks[subtaskIndex].timeSpent += elapsed;
+            updatedSubtasks[subtaskIndex].isTiming = false;
+            updatedSubtasks[subtaskIndex].lastStartTime = null;
 
-                task.lastActiveSubtaskId = subtaskId;
-                updateHistory(); 
-                saveState().then(() => {
-                    if(isEditingModal && elements.modal.id.value === taskId) {
-                       renderSubtasks(task);
-                    }
-                    if (document.getElementById('view-kanban').offsetParent) {
-                        renderBoard(getFilteredTasks());
-                    }
+            let totalTimeSpent = updatedSubtasks.reduce((total, sub) => total + sub.timeSpent, 0);
+            
+            const dataToUpdate = {
+                subtasks: updatedSubtasks,
+                timeSpent: totalTimeSpent
+            };
+
+            const taskRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks', taskId);
+            await updateDoc(taskRef, dataToUpdate);
+
+            if (elapsed > 1000) { 
+                const catalogEntry = activityCatalog[updatedSubtasks[subtaskIndex].name] || {};
+                const timeLogRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'time_log');
+                await addDoc(timeLogRef, {
+                    timestamp: new Date(),
+                    responsible: task.responsible,
+                    process: catalogEntry.process || 'Não Definido',
+                    duration: elapsed
                 });
             }
-        };
-
-        const handlePause = (taskId, subtaskId, shouldSave = true) => {
-            const task = tasks.find(t => t.id === taskId);
-            const subtask = task?.subtasks.find(st => st.id === subtaskId);
-            if (subtask && subtask.isTiming) {
-                const elapsed = new Date() - new Date(subtask.lastStartTime);
-                subtask.timeSpent += elapsed;
-                subtask.isTiming = false;
-                subtask.lastStartTime = null;
-
-                updateTaskTotalTime(task);
-
-                if (elapsed > 100) {
-                    const catalogEntry = activityCatalog[subtask.name] || {};
-                    timeLog.push({
-                        timestamp: new Date().toISOString(),
-                        responsible: task.responsible,
-                        process: catalogEntry.process || 'Não Definido',
-                        duration: elapsed
-                    });
-                }
-                task.lastActiveSubtaskId = subtaskId;
-                if (shouldSave) {
-                    updateHistory(); 
-                    saveState().then(() => {
-                        if(isEditingModal && elements.modal.id.value === taskId) {
-                            renderSubtasks(task);
-                        }
-                    });
-                }
-            }
+            
+            const updatedTask = { ...task, ...dataToUpdate };
+            renderSubtasks(updatedTask);
         };
         
-        const handleResetCard = (taskId) => {
+        const handleResetCard = async (taskId) => {
             const task = tasks.find(t => t.id === taskId);
             if (!task) return;
 
             if (confirm(`Tem certeza que deseja reiniciar o card "${task.title}"?\n\nTodo o tempo e as sub-atividades registradas serão perdidos.`)) {
-                if (task.subtasks) {
-                    task.subtasks.forEach(sub => {
-                        if (sub.isTiming) handlePause(task.id, sub.id, false);
-                    });
-                }
-                task.subtasks = [];
-                task.timeSpent = 0;
-                task.playCount = 0;
-                task.isTiming = false;
-                task.lastStartTime = null;
-                task.lastActiveSubtaskId = null;
-                task.startedAt = null;
-                task.completedAt = null;
-                task.status = 'fazer';
-                task.originalData['Status'] = STATUS_TO_SHEET_MAP['fazer'];
-                updateTaskExpectedTime(task);
-                updateHistory(); 
-                saveState();
+                
+                const taskRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks', taskId);
+                
+                const catalogEntry = activityCatalog[task.originalData?.['Atividade']] || { time: 0 };
+
+                await updateDoc(taskRef, {
+                    subtasks: [],
+                    timeSpent: 0,
+                    playCount: 0,
+                    isTiming: false,
+                    lastStartTime: null,
+                    lastActiveSubtaskId: null,
+                    startedAt: null,
+                    completedAt: null,
+                    status: 'fazer',
+                    originalData: { ...task.originalData, 'Status': STATUS_TO_SHEET_MAP['fazer'] },
+                    expectedTime: catalogEntry.time,
+                });
             }
         };
         
-        const handleCopyCard = (taskId) => {
+        const handleCopyCard = async (taskId) => {
             const originalTask = tasks.find(t => t.id === taskId);
             if (!originalTask) return;
 
-            const newTask = JSON.parse(JSON.stringify(originalTask));
+            let newTask = JSON.parse(JSON.stringify(originalTask));
             const allIdRefs = tasks.map(t => parseInt(t.originalId, 10)).filter(id => !isNaN(id));
             const maxIdRef = allIdRefs.length > 0 ? Math.max(...allIdRefs) : 0;
             const newIdRef = Math.max(700000, maxIdRef + 1);
 
-            newTask.id = `manual-${Date.now()}`;
+            delete newTask.id; 
+
             newTask.originalId = newIdRef;
-            newTask.createdAt = new Date().toISOString();
+            newTask.createdAt = new Date();
             newTask.description = '';
             newTask.timeSpent = 0;
             newTask.playCount = 0;
@@ -2754,20 +2986,19 @@
             }
 
             newTask.originalData['ID_REF'] = newIdRef;
-            newTask.originalData['Criado_GD'] = new Date(newTask.createdAt);
+            newTask.originalData['Criado_GD'] = newTask.createdAt;
             newTask.originalData['Criado por'] = currentUserMatricula;
             newTask.originalData['Status'] = STATUS_TO_SHEET_MAP[newTask.status];
             newTask.originalData['Descrição'] = '';
             newTask.originalData['Diagnóstico'] = '';
 
-            tasks.push(newTask);
-            updateHistory(); 
-            saveState();
+            const tasksCollectionRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks');
+            await addDoc(tasksCollectionRef, newTask);
 
             alert(`Card "${originalTask.title}" copiado com sucesso com o novo ID: ${newIdRef}`);
         };
         
-        const handleDeleteDemand = () => {
+        const handleDeleteDemand = async () => {
             const taskId = elements.modal.id.value;
             if (!taskId) return;
 
@@ -2775,82 +3006,123 @@
             if (!task) return;
 
             if (confirm(`Tem certeza de que deseja excluir permanentemente a demanda "${task.title}" (ID: ${task.originalId})? Esta ação não pode ser desfeita.`)) {
-                const taskIndex = tasks.findIndex(t => t.id === taskId);
-                if (taskIndex > -1) {
-                    tasks.splice(taskIndex, 1);
-                    updateHistory(); 
-                    saveState().then(() => {
-                        closeModal();
-                    });
-                }
+                const taskRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks', taskId);
+                await deleteDoc(taskRef);
+                closeModal();
             }
         };
 
+// COLE A NOVA FUNÇÃO EXATAMENTE AQUI
+        const renderAllowedUsersTable = (allowedUsers) => {
+            const container = document.getElementById('allowed-users-table');
+            if (!allowedUsers || allowedUsers.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 p-4">Nenhum usuário na lista de permissões.</p>';
+                return;
+            }
+            
+            const table = `
+                <table class="w-full text-left">
+                    <thead>
+                        <tr>
+                            <th class="p-2 border-b border-gray-700">Matrícula</th>
+                            <th class="p-2 border-b border-gray-700">Nome</th>
+                            <th class="p-2 border-b border-gray-700">Perfil</th>
+                            <th class="p-2 border-b border-gray-700">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${allowedUsers.map(user => `
+                            <tr class="hover:bg-gray-700/50">
+                                <td class="p-2 border-b border-gray-700">${user.matricula}</td>
+                                <td class="p-2 border-b border-gray-700">${user.nome}</td>
+                                <td class="p-2 border-b border-gray-700 capitalize">${user.role}</td>
+                                <td class="p-2 border-b border-gray-700">
+                                    <button data-matricula="${user.matricula}" class="remove-user-btn text-red-400 hover:text-red-300">Remover</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            container.innerHTML = table;
+        };
 
          const renderCatalog = () => {
-             const container = elements.catalog.container;
-             const demandCounts = tasks.reduce((acc, task) => {
-                 const activityName = task.originalData['Atividade'];
-                 if(activityName) {
-                     acc[activityName] = (acc[activityName] || 0) + 1;
-                 }
-                 return acc;
-             }, {});
+    const container = elements.catalog.container;
+    
+    // << INÍCIO DA CORREÇÃO: Lógica de contagem que permite subatividades duplicadas >>
+    const demandCounts = {};
+    tasks.forEach(task => {
+        // Se o card tem subatividades, a lista delas é a fonte da verdade.
+        // Contamos cada uma, permitindo duplicatas.
+        if (task.subtasks && task.subtasks.length > 0) {
+            task.subtasks.forEach(subtask => {
+                demandCounts[subtask.name] = (demandCounts[subtask.name] || 0) + 1;
+            });
+        } 
+        // Se não há subatividades, contamos a atividade principal do card (caso de cards recém-importados).
+        else if (task.originalData && task.originalData['Atividade']) {
+            const mainActivityName = task.originalData['Atividade'];
+            demandCounts[mainActivityName] = (demandCounts[mainActivityName] || 0) + 1;
+        }
+    });
+    // << FIM DA CORREÇÃO >>
 
-            let catalogArray = Object.entries(activityCatalog).map(([name, details]) => ({
-                'Nome da Atividade': name,
-                'Processo': details.process,
-                'Função': details.role,
-                'Tempo Previsto (h)': details.time,
-                'Qtd. Demandas': demandCounts[name] || 0,
-                'Nec. Anual': details.annualNeed,
-                '% Realização': details.executionPercentage
-            }));
+   let catalogArray = Object.entries(activityCatalog).map(([name, details]) => ({
+       'id': name,
+       'Nome da Atividade': name,
+       'Processo': details.process,
+       'Função': details.role,
+       'Tempo Previsto (h)': details.time,
+       'Qtd. Demandas': demandCounts[name] || 0,
+       'Nec. Anual': details.annualNeed,
+       '% Realização': details.executionPercentage
+   }));
 
-            if (catalogSort.by) {
-                const isAsc = catalogSort.direction === 'asc';
-                catalogArray.sort((a, b) => {
-                    let valA = a[catalogSort.by];
-                    let valB = b[catalogSort.by];
+   if (catalogSort.by) {
+       const isAsc = catalogSort.direction === 'asc';
+       catalogArray.sort((a, b) => {
+           let valA = a[catalogSort.by];
+           let valB = b[catalogSort.by];
 
-                    if (typeof valA === 'string') {
-                        return isAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
-                    } else {
-                        return isAsc ? valA - valB : valB - valA;
-                    }
-                });
-            }
+           if (typeof valA === 'string') {
+               return isAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+           } else {
+               return isAsc ? valA - valB : valB - valA;
+           }
+       });
+   }
 
-             const headers = ['Nome da Atividade', 'Processo', 'Função', 'Tempo Previsto (h)', 'Qtd. Demandas', 'Nec. Anual', '% Realização'];
+    const headers = ['Nome da Atividade', 'Processo', 'Função', 'Tempo Previsto (h)', 'Qtd. Demandas', 'Nec. Anual', '% Realização'];
 
-             const table = `
-                 <table class="w-full text-left">
-                     <thead>
-                         <tr>
-                            ${headers.map(h => {
-                                const isSorted = catalogSort.by === h;
-                                const indicator = isSorted ? (catalogSort.direction === 'asc' ? '▲' : '▼') : '';
-                                return `<th class="p-2 border-b border-gray-700 w-2/5 sortable-header" data-sort-key="${h}">${h}<span class="sort-indicator">${indicator}</span></th>`;
-                            }).join('')}
-                         </tr>
-                     </thead>
-                     <tbody>
-                         ${catalogArray.map(item => `
-                             <tr data-activity-name="${item['Nome da Atividade']}" class="hover:bg-gray-700 cursor-pointer">
-                                 <td class="p-2 border-b border-gray-700">${item['Nome da Atividade']}</td>
-                                 <td class="p-2 border-b border-gray-700">${item['Processo']}</td>
-                                 <td class="p-2 border-b border-gray-700">${item['Função']}</td>
-                                 <td class="p-2 border-b border-gray-700">${item['Tempo Previsto (h)']}</td>
-                                 <td class="p-2 border-b border-gray-700">${item['Qtd. Demandas']}</td>
-                                 <td class="p-2 border-b border-gray-700">${item['Nec. Anual']}</td>
-                                 <td class="p-2 border-b border-gray-700">${item['% Realização']}%</td>
-                             </tr>
-                         `).join('')}
-                     </tbody>
-                 </table>
-             `;
-             container.innerHTML = table;
-         };
+    const table = `
+        <table class="w-full text-left">
+            <thead>
+                <tr>
+                   ${headers.map(h => {
+                       const isSorted = catalogSort.by === h;
+                       const indicator = isSorted ? (catalogSort.direction === 'asc' ? '▲' : '▼') : '';
+                       return `<th class="p-2 border-b border-gray-700 w-2/5 sortable-header" data-sort-key="${h}">${h}<span class="sort-indicator">${indicator}</span></th>`;
+                   }).join('')}
+                </tr>
+            </thead>
+            <tbody>
+                ${catalogArray.map(item => `
+                    <tr data-activity-name="${item.id}" class="hover:bg-gray-700 cursor-pointer">
+                        <td class="p-2 border-b border-gray-700">${item['Nome da Atividade']}</td>
+                        <td class="p-2 border-b border-gray-700">${item['Processo']}</td>
+                        <td class="p-2 border-b border-gray-700">${item['Função']}</td>
+                        <td class="p-2 border-b border-gray-700">${item['Tempo Previsto (h)']}</td>
+                        <td class="p-2 border-b border-gray-700">${item['Qtd. Demandas']}</td>
+                        <td class="p-2 border-b border-gray-700">${item['Nec. Anual']}</td>
+                        <td class="p-2 border-b border-gray-700">${item['% Realização']}%</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+    container.innerHTML = table;
+};
 
          const renderHC = () => {
              const hoursPerHC = parseFloat(elements.hc.hoursInput.value) || 191;
@@ -2885,7 +3157,7 @@
                  }
              });
 
-             tasks.forEach(task => {
+             getFilteredTasks().forEach(task => { 
                  const { expectedTime, role } = task;
                  if(role === 'Eng') hours.current.eng += expectedTime || 0;
                  else if (role === 'Tec') hours.current.tec += expectedTime || 0;
@@ -2898,17 +3170,14 @@
              document.getElementById('summary-base-eng').textContent = hours.base.eng.toFixed(2);
              document.getElementById('summary-base-tec').textContent = hours.base.tec.toFixed(2);
              document.getElementById('summary-base-total').textContent = (hours.base.eng + hours.base.tec).toFixed(2);
-
              document.getElementById('summary-current-eng').textContent = hours.current.eng.toFixed(2);
              document.getElementById('summary-current-tec').textContent = hours.current.tec.toFixed(2);
              document.getElementById('summary-current-total').textContent = (hours.current.eng + hours.current.tec).toFixed(2);
-
              const monthlyAnnualEng = hours.annual.eng / 12;
              const monthlyAnnualTec = hours.annual.tec / 12;
              document.getElementById('summary-annual-eng').textContent = monthlyAnnualEng.toFixed(2);
              document.getElementById('summary-annual-tec').textContent = monthlyAnnualTec.toFixed(2);
              document.getElementById('summary-annual-total').textContent = (monthlyAnnualEng + monthlyAnnualTec).toFixed(2);
-
              const monthlyRealEng = hours.real.eng / 12;
              const monthlyRealTec = hours.real.tec / 12;
              document.getElementById('summary-real-eng').textContent = monthlyRealEng.toFixed(2);
@@ -2920,15 +3189,12 @@
              elements.hc.baseEng.textContent = calculateHC(hours.base.eng).toFixed(2);
              elements.hc.baseTec.textContent = calculateHC(hours.base.tec).toFixed(2);
              elements.hc.baseTotal.textContent = calculateHC(hours.base.eng + hours.base.tec).toFixed(2);
-
              elements.hc.currentEng.textContent = calculateHC(hours.current.eng).toFixed(2);
              elements.hc.currentTec.textContent = calculateHC(hours.current.tec).toFixed(2);
              elements.hc.currentTotal.textContent = calculateHC(hours.current.eng + hours.current.tec).toFixed(2);
-
              elements.hc.annualEng.textContent = calculateHC(hours.annual.eng / 12).toFixed(2);
              elements.hc.annualTec.textContent = calculateHC(hours.annual.tec / 12).toFixed(2);
              elements.hc.annualTotal.textContent = calculateHC((hours.annual.eng + hours.annual.tec) / 12).toFixed(2);
-
              elements.hc.realEng.textContent = calculateHC(hours.real.eng / 12).toFixed(2);
              elements.hc.realTec.textContent = calculateHC(hours.real.tec / 12).toFixed(2);
              elements.hc.realTotal.textContent = calculateHC((hours.real.eng + hours.real.tec) / 12).toFixed(2);
@@ -3009,7 +3275,7 @@
              isEditingModal = false;
          };
 
-         const handleCatalogFormSubmit = (e) => {
+         const handleCatalogFormSubmit = async (e) => {
              e.preventDefault();
 
              if (currentUserRole !== 'manager') {
@@ -3020,7 +3286,7 @@
 
              const { catalog } = elements;
              const originalName = catalog.originalName.value;
-             const newName = catalog.editName.value.trim();
+             const newName = sanitizeDocId(catalog.editName.value.trim()); // Sanitize
              const newProcess = catalog.editProcess.value.trim();
              const newRole = catalog.editRole.value;
              const newTime = parseFloat(catalog.editTime.value) || 0;
@@ -3031,35 +3297,26 @@
                  alert('Erro: Por favor, preencha todos os campos com valores válidos.');
                  return;
              }
-
              if (newName !== originalName && activityCatalog.hasOwnProperty(newName)) {
                  alert('Erro: Já existe uma atividade com este novo nome.');
                  return;
              }
+             
+             const catalogRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'activity_catalog');
+             const newDocRef = doc(catalogRef, newName);
+             const newData = { time: newTime, process: newProcess, annualNeed: newAnnualNeed, executionPercentage: newExecPercentage, role: newRole };
+             
+             await setDoc(newDocRef, newData);
 
              if (originalName && originalName !== newName) {
-                 delete activityCatalog[originalName];
+                 const oldDocRef = doc(catalogRef, originalName);
+                 await deleteDoc(oldDocRef);
              }
-             activityCatalog[newName] = { time: newTime, process: newProcess, annualNeed: newAnnualNeed, executionPercentage: newExecPercentage, role: newRole };
-
-             saveState();
-
-             tasks.forEach(task => {
-                 if (task.originalData['Atividade'] === originalName) {
-                     task.originalData['Atividade'] = newName;
-                 }
-                 if(task.originalData['Atividade'] === newName) {
-                     task.expectedTime = newTime;
-                     task.process = newProcess;
-                     task.role = newRole;
-                 }
-             });
-             saveState();
 
              closeCatalogModal();
          };
 
-         const handleDeleteActivity = () => {
+         const handleDeleteActivity = async () => {
              if (currentUserRole !== 'manager') {
                  alert("Apenas usuários Gestores podem excluir atividades do Catálogo.");
                  return;
@@ -3068,8 +3325,8 @@
              const originalName = elements.catalog.originalName.value;
              if(confirm(`Tem certeza de que deseja excluir a atividade "${originalName}"? Esta ação não pode ser desfeita.`)){
                  if (originalName) {
-                    delete activityCatalog[originalName];
-                    saveState();
+                    const docRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE, 'activity_catalog', sanitizeDocId(originalName));
+                    await deleteDoc(docRef);
                     closeCatalogModal();
                  }
              }
@@ -3103,11 +3360,8 @@
              applyView(initialView);
 
              elements.viewToggle.checked = initialView === 'manager';
-
              document.querySelector('#user-profile').title = `Perfil: ${isManager ? 'Gestor' : 'Equipe'}`;
-
              elements.catalog.addBtn.style.display = isManager ? 'flex' : 'none';
-
              if (isManager) {
                  elements.viewToggle.addEventListener('change', handleViewToggleChange);
              } else {
@@ -3129,15 +3383,14 @@
 
              elements.viewToggle.checked = isManagerView;
              localStorage.setItem('kanbanView', view);
-
              elements.tabs.hc.style.display = isManagerView ? 'flex' : 'none';
-             elements.tabs.alimentadores.style.display = isManagerView ? 'flex' : 'none';
-
+             elements.tabs.alimentadores.style.display = isManagerView ? 'flex' : 'none';             
+             elements.tabs.users.style.display = isManagerView ? 'flex' : 'none'; // <-- ADICIONE ESTA LINHA
              elements.effortAnalysisChartContainer.style.display = isManagerView ? 'block' : 'none';
              elements.efficiencyChartContainer.style.display = isManagerView ? 'block' : 'none';
 
              const activeTabId = document.querySelector('.tab-btn.active')?.id;
-             if (!isManagerView && ['tab-hc', 'tab-alimentadores'].includes(activeTabId)) {
+             if (!isManagerView && ['tab-hc', 'tab-alimentadores', 'tab-users'].includes(activeTabId)) { // <-- ATUALIZE ESTA LINHA
                  switchTab('dashboard');
              }
 
@@ -3148,103 +3401,127 @@
             if (appStarted) return;
             appStarted = true;
 
-            const teamDocRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE);
-            if (unsubscribeSnapshot) unsubscribeSnapshot();
-
-            unsubscribeSnapshot = onSnapshot(teamDocRef, (docSnap) => {
-                if (isEditingModal) return;
-
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    tasks = data.tasks || [];
-                    history = data.history || [];
-                    allHeaders = data.allHeaders || [];
-                    timeLog = data.timeLog || [];
-                    alimentadoresData = data.alimentadoresData || [];
-                    activityCatalog = data.activityCatalog && Object.keys(data.activityCatalog).length > 0 ? data.activityCatalog : defaultActivityCatalog;
-                    planOptions = data.planOptions && data.planOptions.length > 0 ? data.planOptions : defaultPlans;
-                } else {
-                    activityCatalog = defaultActivityCatalog;
-                    planOptions = defaultPlans;
-                    saveState();
-                }
-
-                const filterValues = {};
-                document.querySelectorAll('.global-filter').forEach(f => {
-                    filterValues[f.id] = f.value;
-                });
-
-                populateGlobalFilters();
-
-                Object.keys(filterValues).forEach(id => {
-                    const filterElement = document.getElementById(id);
-                    if (filterElement) {
-                        filterElement.value = filterValues[id];
+const processSnapshot = (snapshot) => {
+    const newTasks = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const convertTimestamps = (obj) => {
+            for (const key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    const value = obj[key];
+                    if (value && typeof value.toDate === 'function') {
+                        obj[key] = value.toDate();
+                    } else if (typeof value === 'object' && value !== null) {
+                        convertTimestamps(value);
                     }
-                });
+                }
+            }
+        };
+        convertTimestamps(data);
+        return { id: doc.id, ...data };
+    });
 
+    tasks = newTasks;
+    
+    // << INÍCIO DA MELHORIA 1: Garante que a interface seja reativa e a tabela de demandas carregue >>
+    // Recria a lista de cabeçalhos a partir dos dados existentes
+    const newHeaders = new Set();
+    const addedFields = ['Plano', 'Prazo', 'Diagnóstico', 'Solicitado por', 'Área do Solicitante', 'Conta Contrato', 'Alimentador', 'Título e-mail Relacionado', 'Criado por'];
+    addedFields.forEach(h => newHeaders.add(h));
+    tasks.forEach(task => {
+        if (task.originalData) {
+            Object.keys(task.originalData).forEach(key => newHeaders.add(key));
+        }
+    });
+    allHeaders = Array.from(newHeaders);
+    // << FIM DA MELHORIA 1 >>
+    
+    if(isEditingModal) {
+        const modalTaskId = elements.modal.id.value;
+        if(modalTaskId) {
+            const updatedTaskInModal = tasks.find(t => t.id === modalTaskId);
+            if(updatedTaskInModal) {
+                renderSubtasks(updatedTaskInModal);
+            }
+        }
+    }
+
+    const filterValues = {};
+    document.querySelectorAll('.global-filter').forEach(f => { filterValues[f.id] = f.value; });
+    
+    populateGlobalFilters();
+
+    Object.keys(filterValues).forEach(id => {
+        const filterElement = document.getElementById(id);
+        if (filterElement) filterElement.value = filterValues[id];
+    });
+
+    renderActiveTabView();
+};
+
+            const baseCollectionRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks');
+            unsubscribeTasks = onSnapshot(query(baseCollectionRef), processSnapshot, (error) => console.error("Erro no listener de tasks:", error));
+
+            const catalogRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'activity_catalog');
+            unsubscribeCatalog = onSnapshot(catalogRef, (snapshot) => {
+                activityCatalog = {};
+                snapshot.docs.forEach(doc => {
+                    activityCatalog[doc.id] = doc.data();
+                });
+                if (snapshot.empty) {
+                     const catalogBatch = writeBatch(db);
+                     Object.entries(defaultActivityCatalog).forEach(([name, data]) => {
+                         const docRef = doc(catalogRef, sanitizeDocId(name));
+                         catalogBatch.set(docRef, data);
+                     });
+                     catalogBatch.commit();
+                }
                 renderActiveTabView();
-            }, (error) => {
-                console.error("Erro ao escutar atualizações do Firebase:", error);
-                alert("Erro de conexão. Não foi possível receber atualizações em tempo real.");
-            });
+            }, (error) => console.error("Erro no listener do catálogo:", error));
+
+const allowedUsersRef = collection(db, 'allowed_users');
+            unsubscribeAllowedUsers = onSnapshot(allowedUsersRef, (snapshot) => {
+                const allowedUsers = snapshot.docs.map(doc => ({ matricula: doc.id, ...doc.data() }));
+                // Apenas renderiza a tabela se a view estiver ativa
+                if (document.getElementById('view-users').offsetParent) {
+                    renderAllowedUsersTable(allowedUsers);
+                }
+            }, (error) => console.error("Erro no listener de usuários permitidos:", error));
+
+            const alimentadoresRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'alimentadores');
+            unsubscribeAlimentadores = onSnapshot(alimentadoresRef, (snapshot) => {
+                alimentadoresData = snapshot.docs.map(doc => doc.data());
+                renderActiveTabView();
+            }, (error) => console.error("Erro no listener de alimentadores:", error));
+            
+            const timeLogRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'time_log');
+            unsubscribeTimeLog = onSnapshot(timeLogRef, (snapshot) => {
+                timeLog = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    data.timestamp = toValidDate(data.timestamp);
+                    return data;
+                });
+                populateTimeLogWeekSelector();
+                renderTimeLogCharts();
+            }, (error) => console.error("Erro no listener do timeLog:", error));
 
 
             clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                  tasks.forEach(task => {
-                    let totalTime = 0;
                     if (task.subtasks && task.subtasks.some(st => st.isTiming)) {
-
-                        task.subtasks.forEach(subtask => {
-                            let subtaskTime = subtask.timeSpent;
-                            if (subtask.isTiming) {
-                                subtaskTime += new Date() - new Date(subtask.lastStartTime);
-                                const subtaskTimerInModal = document.querySelector(`.subtask-item[data-subtask-id="${subtask.id}"] .subtask-timer`);
-                                if (subtaskTimerInModal) subtaskTimerInModal.textContent = formatTime(subtaskTime) + (subtask.expectedTime ? ` / ${subtask.expectedTime.toFixed(1)}h Prev.` : '');
-                                const subtaskTimerInWIP = document.querySelector(`.wip-item[data-subtask-id="${subtask.id}"] .timer-display`);
-                                if (subtaskTimerInWIP) subtaskTimerInWIP.textContent = formatTime(subtaskTime);
+                        let totalTime = task.subtasks.reduce((acc, sub) => {
+                            let subTime = sub.timeSpent;
+                            if (sub.isTiming) {
+                                subTime += new Date() - toValidDate(sub.lastStartTime);
                             }
-                            totalTime += subtaskTime;
-                        });
-                        task.timeSpent = totalTime;
+                            return acc + subTime;
+                        }, 0);
 
+                        const wipTimer = document.querySelector(`.wip-item[data-id="${task.id}"] .timer-display`);
+                        if (wipTimer) wipTimer.textContent = formatTime(totalTime);
+                        
                         const cardTimer = document.querySelector(`.kanban-card[data-id="${task.id}"] .timer-display`);
-                        if (cardTimer) {
-                            cardTimer.textContent = formatTime(task.timeSpent);
-                        }
-
-                        const cardTimeBar = document.querySelector(`.kanban-card[data-id="${task.id}"] [data-bar="time"]`);
-                        if (cardTimeBar && task.expectedTime > 0) {
-                             const spentTimeHours = task.timeSpent / 3600000;
-                             const expectedTime = task.expectedTime;
-                             const timeProgressPercentage = (spentTimeHours / expectedTime) * 100;
-                             const displayTimeProgress = Math.min(timeProgressPercentage, 100);
-
-                             let timeBarColor = 'bg-blue-500';
-                             if (timeProgressPercentage > 100) { timeBarColor = 'bg-red-500'; }
-                             else if (timeProgressPercentage > 80) { timeBarColor = 'bg-yellow-500'; }
-
-                             const progressDiv = cardTimeBar.querySelector('.w-full > div');
-
-                             if(progressDiv) {
-                                progressDiv.className = `${timeBarColor} h-1.5 rounded-full`;
-                                progressDiv.style.width = `${displayTimeProgress}%`;
-                             }
-                        }
-
-                         const cardCompletionBar = document.querySelector(`.kanban-card[data-id="${task.id}"] [data-bar="completion"]`);
-                         if(cardCompletionBar) {
-                             const totalSubtasks = task.subtasks?.length || 0;
-                             const completedSubtasks = task.subtasks?.filter(st => st.status === 'completed').length || 0;
-                             const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
-
-                             const progressDiv = cardCompletionBar.querySelector('.w-full > div');
-                             const percentageDisplay = cardCompletionBar.querySelector('.font-semibold');
-
-                             if(progressDiv) progressDiv.style.width = `${progressPercentage}%`;
-                             if(percentageDisplay) percentageDisplay.textContent = `${progressPercentage.toFixed(0)}%`;
-                         }
+                        if (cardTimer) cardTimer.textContent = formatTime(totalTime);
                     }
                 });
             }, 1000);
@@ -3254,10 +3531,12 @@
 
         const stopApp = () => {
             clearInterval(timerInterval);
-            if (unsubscribeSnapshot) {
-                unsubscribeSnapshot();
-                unsubscribeSnapshot = null;
-            }
+            if (unsubscribeTasks) unsubscribeTasks();
+            if (unsubscribeCatalog) unsubscribeCatalog();
+            if (unsubscribeAlimentadores) unsubscribeAlimentadores();
+            if (unsubscribeTimeLog) unsubscribeTimeLog();
+            if (unsubscribeAllowedUsers) unsubscribeAllowedUsers(); // <-- ADICIONE ESTA LINHA
+
             appStarted = false;
             tasks = []; history = []; planOptions = []; alimentadoresData = [];
             Object.values(chartObjects).forEach(chart => chart.destroy());
@@ -3266,7 +3545,7 @@
              elements.tableContainer.innerHTML = '<p class="text-gray-400 p-4">Faça login para ver os dados.</p>';
              elements.kanbanColumns.forEach(col => col.innerHTML = '');
         };
-
+        
         const formatMatriculaAsEmail = (matricula) => {
             return `${matricula.trim()}${INTERNAL_EMAIL_DOMAIN}`;
         }
@@ -3283,15 +3562,12 @@
             if (!tooltip) return;
 
             const iconRect = container.getBoundingClientRect();
-
             tooltip.style.visibility = 'visible';
             const tooltipHeight = tooltip.offsetHeight;
             const tooltipWidth = tooltip.offsetWidth;
             tooltip.style.visibility = ''; 
-
             const spaceAbove = iconRect.top;
             const spaceBelow = window.innerHeight - iconRect.bottom;
-
             let top, left;
 
             if (spaceAbove < tooltipHeight + 8 && spaceBelow > spaceAbove) {
@@ -3299,14 +3575,11 @@
             } else {
                 top = iconRect.top - tooltipHeight - 8;
             }
-
             left = iconRect.left + (iconRect.width / 2) - (tooltipWidth / 2);
-
             if (left < 8) left = 8;
             if (left + tooltipWidth > window.innerWidth - 8) {
                 left = window.innerWidth - tooltipWidth - 8;
             }
-
             tooltip.style.top = `${top}px`;
             tooltip.style.left = `${left}px`;
         };
@@ -3327,16 +3600,14 @@
             }, {});
 
             const inputValue = parseInt(inputElement.value, 10);
+            const levelData = (groupedData[dimension] || []).find(level => parseInt(level.Nível) === inputValue);
 
-            if (inputValue >= 1 && inputValue <= 5) {
-                const levelData = (groupedData[dimension] || []).find(level => parseInt(level.Nível) === inputValue);
-                if (levelData) {
-                    tooltip.innerHTML = `<strong>${levelData.Nível}: ${levelData.Atividade}</strong><br>${levelData.Processos}<br><em class="text-gray-400">Exemplo: ${levelData.EXEMPLOS}</em>`;
-                }
+            if (levelData) {
+                tooltip.innerHTML = `<strong>${levelData.Nível}: ${levelData.Atividade}</strong><br>${levelData.Processos}<br><em class="text-gray-400">Exemplo: ${levelData.EXEMPLOS}</em>`;
             } else {
                 tooltip.innerHTML = (groupedData[dimension] || [])
                     .sort((a, b) => b.Nível - a.Nível)
-                    .map(level => `<strong>${level.Nível}: ${level.Atividade}</strong><br>${level.Processos}<br><em class="text-gray-400">Exemplo: ${levelData.EXEMPLOS}</em>`)
+                    .map(level => `<strong>${level.Nível}: ${level.Atividade}</strong> - ${level.Processos}`)
                     .join('<br><br>');
             }
         };
@@ -3404,41 +3675,68 @@
                     });
             });
 
-            signupBtn.addEventListener('click', () => {
+            // [COMEÇO DA NOVA VERSÃO]
+            signupBtn.addEventListener('click', async () => {
                 loginError.classList.add('hidden');
                 signupBtn.disabled = true;
-                signupBtn.textContent = "Cadastrando...";
-
-                const matricula = matriculaInput.value;
+                signupBtn.textContent = "Verificando...";
+            
+                const matricula = matriculaInput.value.trim();
                 const password = passwordInput.value;
-
-                 if (password.length < 6) {
-                     loginError.textContent = "A senha deve ter pelo menos 6 caracteres.";
-                     loginError.classList.remove('hidden');
-                     signupBtn.disabled = false;
-                     signupBtn.textContent = "Cadastrar Nova Matrícula";
-                     return;
-                 }
-
-                const email = formatMatriculaAsEmail(matricula);
-
-                createUserWithEmailAndPassword(auth, email, password)
-                    .catch((error) => {
-                        let message = "Erro ao cadastrar. Tente novamente.";
-                         if (error.code === 'auth/email-already-in-use') {
-                            message = "Esta matrícula já está cadastrada.";
-                        } else if (error.code === 'auth/weak-password') {
-                            message = "A senha é muito fraca. Use pelo menos 6 caracteres.";
-                        } else if (error.code === 'auth/invalid-email') {
-                             message = "Formato de matrícula inválido.";
+            
+                if (password.length < 6) {
+                    loginError.textContent = "A senha deve ter pelo menos 6 caracteres.";
+                    loginError.classList.remove('hidden');
+                    signupBtn.disabled = false;
+                    signupBtn.textContent = "Cadastrar Nova Matrícula";
+                    return;
+                }
+            
+                try {
+                    // VERIFICA SE O USUÁRIO ESTÁ NA LISTA DE PERMISSÕES
+                    const allowedUserRef = doc(db, 'allowed_users', matricula);
+                    const docSnap = await getDoc(allowedUserRef);
+            
+                    if (!docSnap.exists()) {
+                        throw new Error("not-allowed");
+                    }
+                    
+                    const allowedUserData = docSnap.data();
+                    const userRole = allowedUserData.role || 'team';
+                    
+                    signupBtn.textContent = "Cadastrando...";
+                    const email = formatMatriculaAsEmail(matricula);
+                    
+                    // CRIA O USUÁRIO NO FIREBASE AUTHENTICATION
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+            
+                    // CRIA O DOCUMENTO DE PERFIL (ROLE) PARA O USUÁRIO
+                    const userRoleRef = doc(db, 'user_roles', user.uid);
+                    await setDoc(userRoleRef, { role: userRole });
+                    
+                    // O login será automático via onAuthStateChanged
+                    
+                } catch (error) {
+                    let message = "Erro ao cadastrar. Tente novamente.";
+                    if (error.message === "not-allowed") {
+                        message = "Matrícula não autorizada. Contate o administrador.";
+                    } else if (error.code) {
+                        switch (error.code) {
+                            case 'auth/email-already-in-use':
+                                message = "Esta matrícula já está cadastrada."; break;
+                            case 'auth/weak-password':
+                                message = "A senha é muito fraca. Use pelo menos 6 caracteres."; break;
+                            case 'auth/invalid-email':
+                                message = "Formato de matrícula inválido."; break;
                         }
-                        loginError.textContent = message;
-                        loginError.classList.remove('hidden');
-                    })
-                    .finally(() => {
-                         signupBtn.disabled = false;
-                         signupBtn.textContent = "Cadastrar Nova Matrícula";
-                    });
+                    }
+                    loginError.textContent = message;
+                    loginError.classList.remove('hidden');
+                } finally {
+                    signupBtn.disabled = false;
+                    signupBtn.textContent = "Cadastrar Nova Matrícula";
+                }
             });
 
             logoutBtn.addEventListener('click', () => {
@@ -3453,13 +3751,11 @@
              document.querySelectorAll('.tooltip-container').forEach(container => {
                 const tooltip = container.querySelector('.tooltip');
                 if (!tooltip) return;
-
                 container.addEventListener('mouseenter', () => {
                     positionTooltip(container);
                     tooltip.style.visibility = 'visible';
                     tooltip.style.opacity = '1';
                 });
-
                 container.addEventListener('mouseleave', () => {
                     tooltip.style.visibility = 'hidden';
                     tooltip.style.opacity = '0';
@@ -3470,48 +3766,39 @@
              elements.addDemandBtn.addEventListener('click', () => openModal());
              elements.exportBtn.addEventListener('click', handleExport);
              elements.timeLogWeekSelector.addEventListener('change', renderTimeLogCharts);
-
              elements.modal.cancelBtn.addEventListener('click', closeModal);
              elements.modal.closeBtn.addEventListener('click', closeModal);
              elements.modal.form.addEventListener('submit', handleFormSubmit);
              elements.modal.status.addEventListener('change', toggleCompletionDateVisibility);
              elements.modal.deleteBtn.addEventListener('click', handleDeleteDemand);
-
              elements.importDemandsBtn.addEventListener('click', () => elements.fileInputDemands.click());
              elements.fileInputDemands.addEventListener('change', (e) => handleFileImport(e, processDemandsData));
              elements.importAlimentadoresBtn.addEventListener('click', () => elements.fileInputAlimentadores.click());
              elements.fileInputAlimentadores.addEventListener('change', (e) => handleFileImport(e, processAlimentadoresData));
-
              elements.clearDataBtn.addEventListener('click', clearData);
              elements.globalFilters.addEventListener('input', e => { if (e.target.classList.contains('global-filter')) renderActiveTabView(); });
              elements.clearFiltersBtn.addEventListener('click', () => { document.querySelectorAll('.global-filter').forEach(f => f.value = ''); renderActiveTabView(); });
              elements.kanbanSortBy.addEventListener('change', handleSortChange);
              elements.kanbanSortDirection.addEventListener('change', handleSortChange);
              elements.modal.type.addEventListener('change', updatePrioritizationView);
-             
              elements.modal.gut.g.addEventListener('input', () => { calculateGUT(); updateGutTooltipContent(elements.modal.gut.g, 'GRAVIDADE'); });
              elements.modal.gut.u.addEventListener('input', () => { calculateGUT(); updateGutTooltipContent(elements.modal.gut.u, 'URGÊNCIA'); });
              elements.modal.gut.t.addEventListener('input', () => { calculateGUT(); updateGutTooltipContent(elements.modal.gut.t, 'TENDÊNCIA'); });
-
              document.getElementById('gut-g').previousElementSibling.addEventListener('mouseenter', () => updateGutTooltipContent(elements.modal.gut.g, 'GRAVIDADE'));
              document.getElementById('gut-u').previousElementSibling.addEventListener('mouseenter', () => updateGutTooltipContent(elements.modal.gut.u, 'URGÊNCIA'));
              document.getElementById('gut-t').previousElementSibling.addEventListener('mouseenter', () => updateGutTooltipContent(elements.modal.gut.t, 'TENDÊNCIA'));
-             
              Object.keys(elements.modal.rice).forEach(key => { if(elements.modal.rice[key].addEventListener) elements.modal.rice[key].addEventListener('input', () => calculateRICE()); });
-
             elements.modal.feeder.addEventListener('change', (e) => {
                 const feederName = e.target.value;
-                const alimentadorInfo = alimentadoresData.find(a => a.Alimentador === feederName);
+                const feederInfo = alimentadoresData.find(a => a.Alimentador === feederName);
                 if (feederInfo) {
-                    elements.modal.municipio.value = alimentadorInfo.Município || '';
-                    elements.modal.utd.value = alimentadorInfo.UTD || '';
-                    elements.modal.setor.value = alimentadorInfo.Setor || '';
-                    elements.modal.superintendencia.value = alimentadorInfo.Superintendência || '';
-
-                    const focal = alimentadorInfo.Focal || '';
+                    elements.modal.municipio.value = feederInfo.Município || '';
+                    elements.modal.utd.value = feederInfo.UTD || '';
+                    elements.modal.setor.value = feederInfo.Setor || '';
+                    elements.modal.superintendencia.value = feederInfo.Superintendência || '';
+                    const focal = feederInfo.Focal || '';
                     if (focal && !teamMembers.includes(focal)) {
-                        teamMembers.push(focal);
-                        teamMembers.sort();
+                        teamMembers.push(focal); teamMembers.sort();
                         const currentResponsible = elements.modal.responsible.value;
                         elements.modal.responsible.innerHTML = '<option value="">Ninguém atribuído</option>' + teamMembers.map(m => `<option value="${m}">${m}</option>`).join('');
                         elements.modal.responsible.value = currentResponsible;
@@ -3520,170 +3807,119 @@
                 }
             });
 
-            elements.modal.subtasks.addBtn.addEventListener('click', () => {
+            elements.modal.subtasks.addBtn.addEventListener('click', async () => {
                 const taskId = elements.modal.id.value;
                 const task = tasks.find(t => t.id === taskId);
                 if (task) {
                     const activityName = elements.modal.subtasks.catalogSelect.value;
                     const activityDetails = activityCatalog[activityName];
                     if (!activityDetails) return;
-
                     const newSubtask = {
-                        id: `sub-${Date.now()}`,
-                        name: activityName,
-                        timeSpent: 0,
-                        isTiming: false,
-                        lastStartTime: null,
-                        status: 'pending',
-                        expectedTime: activityDetails.time || 0
+                        id: `sub-${Date.now()}`, name: activityName, timeSpent: 0, isTiming: false,
+                        lastStartTime: null, status: 'pending', expectedTime: activityDetails.time || 0
                     };
-                    if(!task.subtasks) task.subtasks = [];
-                    task.subtasks.push(newSubtask);
-
-                    updateTaskExpectedTime(task);
-
-                    renderSubtasks(task);
-                    saveState();
+                    const updatedSubtasks = [...(task.subtasks || []), newSubtask];
+                    
+                    const newExpectedTime = updatedSubtasks.reduce((total, sub) => total + (sub.expectedTime || 0), 0);
+                    
+                    const taskRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks', taskId);
+                    await updateDoc(taskRef, { subtasks: updatedSubtasks, expectedTime: newExpectedTime });
+                    
+                    const updatedTask = { ...task, subtasks: updatedSubtasks, expectedTime: newExpectedTime };
+                    renderSubtasks(updatedTask);
                 }
             });
 
-            elements.modal.subtasks.list.addEventListener('click', (e) => {
+            elements.modal.subtasks.list.addEventListener('click', async (e) => {
                 const button = e.target.closest('button[data-action]');
                 if (!button) return;
-
                 const taskId = elements.modal.id.value;
                 const task = tasks.find(t => t.id === taskId);
                 if (!task) return;
-
                 const subtaskItem = button.closest('.subtask-item');
                 const subtaskId = subtaskItem.dataset.subtaskId;
-                const subtask = task.subtasks.find(st => st.id === subtaskId);
-                if (!subtask) return;
-
                 const action = button.dataset.action;
-                if (action === 'play') {
-                    handleGlobalPlay(taskId, subtaskId);
-                } else if (action === 'pause') {
-                    handlePause(taskId, subtaskId);
-                } else if (action === 'complete') {
-                    if (subtask.isTiming) handlePause(taskId, subtaskId, false);
-                    subtask.status = 'completed';
-                    updateTaskTotalTime(task);
-                    saveState();
-                    renderSubtasks(task);
 
-                } else if (action === 'remove') {
-                    if (confirm(`Tem certeza que deseja remover a sub-atividade "${subtask.name}"?`)) {
-                        task.subtasks = task.subtasks.filter(st => st.id !== subtaskId);
-                        updateTaskTotalTime(task);
-                        updateTaskExpectedTime(task);
-                        renderSubtasks(task);
-                        saveState();
+                if (action === 'play') { handleGlobalPlay(taskId, subtaskId); }
+                else if (action === 'pause') { handlePause(taskId, subtaskId); }
+                else {
+                    const subtaskIndex = task.subtasks.findIndex(st => st.id === subtaskId);
+                    if (subtaskIndex === -1) return;
+                    let updatedSubtasks = [...task.subtasks];
+
+                    if (action === 'complete') {
+                        if (updatedSubtasks[subtaskIndex].isTiming) await handlePause(taskId, subtaskId);
+                        updatedSubtasks[subtaskIndex].status = 'completed';
+                    } else if (action === 'remove') {
+                        if (confirm(`Tem certeza que deseja remover a sub-atividade "${updatedSubtasks[subtaskIndex].name}"?`)) {
+                           updatedSubtasks.splice(subtaskIndex, 1);
+                        }
                     }
+                    const newExpectedTime = updatedSubtasks.reduce((total, sub) => total + (sub.expectedTime || 0), 0);
+                    const taskRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks', taskId);
+                    await updateDoc(taskRef, { subtasks: updatedSubtasks, expectedTime: newExpectedTime });
+                    
+                    const updatedTask = { ...task, subtasks: updatedSubtasks, expectedTime: newExpectedTime };
+                    renderSubtasks(updatedTask);
                 }
             });
 
             elements.kanbanBoard.addEventListener('click', e => {
                 const button = e.target.closest('button[data-action]');
                 if (!button) return;
-            
                 const action = button.dataset.action;
                 const card = button.closest('.kanban-card');
                 if (!card) return;
-                
                 const taskId = card.dataset.id;
-                
-                if (action === 'open-details') {
-                    e.stopPropagation(); 
-                    openModal(taskId);
-                    return;
-                }
-                
+                if (action === 'open-details') { e.stopPropagation(); openModal(taskId); return; }
                 if (action === 'main-toggle-play') {
                     const task = tasks.find(t => t.id === taskId);
                     if (!task || !task.subtasks || task.subtasks.length === 0) {
-                         alert("Adicione sub-atividades no modal para iniciar o timer.");
-                         return;
+                         alert("Adicione sub-atividades no modal para iniciar o timer."); return;
                     }
-
                     let runningSubtask = task.subtasks.find(st => st.isTiming);
-
-                    if (runningSubtask) {
-                        handlePause(taskId, runningSubtask.id);
-                    } else {
-                        let subtaskToPlay = null;
-                        if (task.lastActiveSubtaskId) {
-                            const lastActive = task.subtasks.find(st => st.id === task.lastActiveSubtaskId);
-                            if (lastActive && lastActive.status === 'pending') {
-                                subtaskToPlay = lastActive;
-                            }
-                        }
-                        if (!subtaskToPlay) {
-                            subtaskToPlay = task.subtasks.find(st => st.status === 'pending');
-                        }
-                        if (subtaskToPlay) {
-                            handleGlobalPlay(taskId, subtaskToPlay.id);
-                        } else if (task.subtasks.every(st => st.status === 'completed')) {
-                             alert("Todas as sub-atividades deste card estão concluídas.");
-                        }
+                    if (runningSubtask) { handlePause(taskId, runningSubtask.id); }
+                    else {
+                        let subtaskToPlay = task.lastActiveSubtaskId ? task.subtasks.find(st => st.id === task.lastActiveSubtaskId && st.status === 'pending') : null;
+                        if (!subtaskToPlay) subtaskToPlay = task.subtasks.find(st => st.status === 'pending');
+                        if (subtaskToPlay) handleGlobalPlay(taskId, subtaskToPlay.id);
+                        else if (task.subtasks.every(st => st.status === 'completed')) alert("Todas as sub-atividades deste card estão concluídas.");
                     }
-                } else if (action === 'reset-card') {
-                    handleResetCard(taskId);
-                } else if (action === 'copy-card') {
-                    handleCopyCard(taskId);
-                }
+                } else if (action === 'reset-card') { handleResetCard(taskId); }
+                else if (action === 'copy-card') { handleCopyCard(taskId); }
             });
-
 
              elements.kanbanColumns.forEach(column => {
                  column.addEventListener('dragover', e => e.preventDefault());
-                 column.addEventListener('drop', e => {
+                 column.addEventListener('drop', async (e) => {
                      e.preventDefault();
                      const newStatus = column.dataset.status;
                      const task = tasks.find(t => t.id === draggedTaskId);
                      if (task && task.status !== newStatus) {
                         if (newStatus === 'concluido' && task.subtasks && task.subtasks.some(st => st.status !== 'completed')) {
                             alert("Ação bloqueada: Para mover um card para 'Concluído', todas as suas sub-atividades devem estar concluídas.");
-                            draggedTaskId = null;
-                            renderBoard(getFilteredTasks());
-                            return;
+                            renderBoard(getFilteredTasks()); return;
                         }
-
-                         const oldStatus = task.status;
-                         if (oldStatus === 'andamento' && task.subtasks) {
-                            task.subtasks.forEach(sub => {
-                                if (sub.isTiming) handlePause(task.id, sub.id, false);
-                            });
-                         }
-
-                         task.status = newStatus;
-                         task.originalData['Status'] = STATUS_TO_SHEET_MAP[newStatus] || newStatus;
-
-                         if (newStatus === 'concluido') {
-                             if (!task.completedAt) {
-                                 task.completedAt = new Date().toISOString();
-                             }
-                             task.originalData['Data de Conclusão'] = new Date(task.completedAt);
-                         } else {
-                             task.completedAt = null;
-                             task.originalData['Data de Conclusão'] = null;
-                         }
-
-                         if (newStatus === 'andamento' && !task.startedAt) task.startedAt = new Date().toISOString();
-                         
-                         updateHistory();
-                         saveState().then(() => {
-                            draggedTaskId = null;
-                         });
+                        
+                        let dataToUpdate = { status: newStatus, originalData: { ...task.originalData, 'Status': STATUS_TO_SHEET_MAP[newStatus] || newStatus } };
+                        if (task.status === 'andamento' && task.subtasks) {
+                            const runningSubtask = task.subtasks.find(st => st.isTiming);
+                            if (runningSubtask) await handlePause(task.id, runningSubtask.id);
+                        }
+                        if (newStatus === 'concluido' && !task.completedAt) dataToUpdate.completedAt = new Date();
+                        else if (newStatus !== 'concluido') dataToUpdate.completedAt = null;
+                        if (newStatus === 'andamento' && !task.startedAt) dataToUpdate.startedAt = new Date();
+                        
+                        const taskRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks', draggedTaskId);
+                        await updateDoc(taskRef, dataToUpdate);
                      }
+                     draggedTaskId = null;
                  });
              });
 
              elements.catalog.container.addEventListener('click', (e) => {
                  const row = e.target.closest('tr');
-                 if (row && row.dataset.activityName) {
-                     openCatalogModal(row.dataset.activityName);
-                 }
+                 if (row && row.dataset.activityName) openCatalogModal(row.dataset.activityName);
              });
              elements.catalog.addBtn.addEventListener('click', () => openCatalogModal());
              elements.catalog.form.addEventListener('submit', handleCatalogFormSubmit);
@@ -3691,51 +3927,64 @@
              elements.catalog.deleteBtn.addEventListener('click', handleDeleteActivity);
              elements.hc.hoursInput.addEventListener('input', renderHC);
              elements.hc.productivityFactor.addEventListener('input', renderHC);
-
             elements.tableContainer.addEventListener('click', e => {
                 const header = e.target.closest('th.sortable-header');
                 if (!header) return;
-
                 const key = header.dataset.sortKey;
-                if (tableSort.by === key) {
-                    tableSort.direction = tableSort.direction === 'asc' ? 'desc' : 'asc';
-                } else {
-                    tableSort.by = key;
-                    tableSort.direction = 'asc';
-                }
+                if (tableSort.by === key) tableSort.direction = tableSort.direction === 'asc' ? 'desc' : 'asc';
+                else { tableSort.by = key; tableSort.direction = 'asc'; }
                 renderTable(getFilteredTasks());
             });
-
             elements.catalog.container.addEventListener('click', e => {
                 const header = e.target.closest('th.sortable-header');
                 if (!header) return;
-
                 const key = header.dataset.sortKey;
-                if (catalogSort.by === key) {
-                    catalogSort.direction = catalogSort.direction === 'asc' ? 'desc' : 'asc';
-                } else {
-                    catalogSort.by = key;
-                    catalogSort.direction = 'asc';
-                }
+                if (catalogSort.by === key) catalogSort.direction = catalogSort.direction === 'asc' ? 'desc' : 'asc';
+            else { catalogSort.by = key; catalogSort.direction = 'asc'; }
                 renderCatalog();
             });
-
             elements.alimentadoresTableContainer.addEventListener('click', e => {
                 const header = e.target.closest('th.sortable-header');
                 if (!header) return;
-
                 const key = header.dataset.sortKey;
-                if (alimentadoresSort.by === key) {
-                    alimentadoresSort.direction = alimentadoresSort.direction === 'asc' ? 'desc' : 'asc';
-                } else {
-                    alimentadoresSort.by = key;
-                    alimentadoresSort.direction = 'asc';
-                }
+                if (alimentadoresSort.by === key) alimentadoresSort.direction = alimentadoresSort.direction === 'asc' ? 'desc' : 'asc';
+                else { alimentadoresSort.by = key; alimentadoresSort.direction = 'asc'; }
                 renderAlimentadoresTable();
             });
+
+// COLE O NOVO CÓDIGO DE LISTENERS EXATAMENTE AQUI
+            document.getElementById('add-user-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const matricula = document.getElementById('new-user-matricula').value.trim();
+                const nome = document.getElementById('new-user-name').value.trim();
+                const role = document.getElementById('new-user-role').value;
+            
+                if (!matricula || !nome) {
+                    alert("Matrícula e Nome são obrigatórios.");
+                    return;
+                }
+            
+                const userRef = doc(db, 'allowed_users', matricula);
+                await setDoc(userRef, { nome, role });
+                
+                alert(`Usuário ${nome} (${matricula}) adicionado à lista de permissões.`);
+                e.target.reset();
+            });
+            
+            document.getElementById('allowed-users-table').addEventListener('click', async (e) => {
+                if (e.target.classList.contains('remove-user-btn')) {
+                    const matricula = e.target.dataset.matricula;
+                    if (confirm(`Tem certeza que deseja remover a permissão da matrícula ${matricula}?`)) {
+                        const userRef = doc(db, 'allowed_users', matricula);
+                        await deleteDoc(userRef);
+                        alert(`Permissão para ${matricula} removida.`);
+                    }
+                }
+            });
+
          };
 
-        renderGUTGuide(); // Carrega os dados do guia GUT na memória ao iniciar
+        renderGUTGuide();
         initAuthentication();
     });
 </script>
