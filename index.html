@@ -679,10 +679,6 @@
                             </div>
                         </div>
                         <div>
-                            <label for="demand-contract" class="block mb-1 font-semibold text-sm">Conta Contrato</label>
-                            <input type="text" id="demand-contract" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
-                        </div>
-                         <div>
                             <label for="demand-related-email" class="block mb-1 font-semibold text-sm">Título e-mail Relacionado</label>
                             <textarea id="demand-related-email" rows="2" class="w-full p-2 rounded bg-gray-700 border border-gray-600"></textarea>
                         </div>
@@ -1204,7 +1200,6 @@
                     'Descrição': { key: 'description', isRoot: true },
                     'Atribuído a': { key: 'responsible', isRoot: true },
                     'Núcleo': { key: 'nucleus', isRoot: true },
-                    'Conta Contrato': { key: 'Conta Contrato' },
                     'Prazo': { key: 'Prazo', isDate: true },
                     'Plano': { key: 'Plano' },
                     'Alimentador': { key: 'Alimentador' },
@@ -1511,7 +1506,6 @@
                  { key: 'Núcleo', label: 'Núcleo' },
                  { key: 'Plano', label: 'Plano', values: planOptions },
                  { key: 'UTD', label: 'UTD' },
-                 { key: 'Conta Contrato', label: 'Conta Contrato', type: 'text' },
                  { key: 'Prioridade', label: 'Criticidade' },
                  { key: 'Atividade', label: 'Atividade' },
                  { key: 'Solicitado por', label: 'Solicitado por' },
@@ -1802,7 +1796,12 @@
 
          const renderTable = (tasksToRender) => {
     const container = elements.tableContainer;
-    if (!allHeaders || allHeaders.length === 0) {
+    
+    // << INÍCIO DA CORREÇÃO: Filtra explicitamente a coluna "Conta Contrato" da exibição >>
+    const filteredHeaders = allHeaders.filter(h => h !== 'Conta Contrato');
+    // << FIM DA CORREÇÃO >>
+
+    if (!filteredHeaders || filteredHeaders.length === 0) {
         container.innerHTML = '<p class="text-gray-400 p-4">Nenhum dado importado. Clique em "Importar Demandas" para começar.</p>';
         return;
     }
@@ -1848,17 +1847,15 @@
     }
 
     const msPerDay = 1000 * 60 * 60 * 24;
-    const headers = [...allHeaders, 'Score', 'Data de Início', 'Lead Time (dias)', 'Cycle Time (dias)', 'Tempo Gasto (HH:MM:SS)', 'Tempo Previsto (h)', 'Desvio (h)', 'Contador de Play'];
+    const headers = [...filteredHeaders, 'Score', 'Data de Início', 'Lead Time (dias)', 'Cycle Time (dias)', 'Tempo Gasto (HH:MM:SS)', 'Tempo Previsto (h)', 'Desvio (h)', 'Contador de Play'];
     const dateColumns = ['Criado', 'Modificado', 'Data de Conclusão', 'Prazo', 'Data de Início', 'Criado_GD'];
     
-    // << INÍCIO DA MELHORIA: Lista de colunas para truncar foi expandida >>
     const longTextColumns = [
         'Título', 'Descrição', 'Diagnóstico', 'Atividade',
         'Gravidade (GUT)', 'Urgência (GUT)', 'Tendência (GUT)',
         'Solicitado por', 'Área do Solicitante',
         'Título e-mail Relacionado', 'Motivo Reclamação', 'Observação'
     ];
-    // << FIM DA MELHORIA >>
 
     const table = `
         <table class="w-full text-left">
@@ -1893,7 +1890,7 @@
 
                     return `
                     <tr class="hover:bg-gray-700/50">
-                        ${allHeaders.map(h => {
+                        ${filteredHeaders.map(h => {
                             const cellValue = (task.originalData && task.originalData[h] !== undefined) ? task.originalData[h] : '';
                             const formattedValue = dateColumns.includes(h) ? formatDate(cellValue) : (cellValue || '');
                             
@@ -2582,7 +2579,6 @@
                  modal.deadline.value = toDateInput(data['Prazo']);
                  modal.requester.value = data['Solicitado por'] || '';
                  modal.requesterArea.value = data['Área do Solicitante'] || '';
-                 modal.contract.value = data['Conta Contrato'] || '';
                  modal.feeder.value = data['Alimentador'] || '';
                  modal.relatedEmail.value = data['Título e-mail Relacionado'] || '';
                  modal.diagnosis.value = data['Diagnóstico'] || '';
@@ -2718,7 +2714,6 @@
                         'Prazo': deadlineDate,
                         'Solicitado por': modal.requester.value,
                         'Área do Solicitante': modal.requesterArea.value,
-                        'Conta Contrato': modal.contract.value,
                         'Alimentador': modal.feeder.value,
                         'Título e-mail Relacionado': modal.relatedEmail.value,
                         'Diagnóstico': modal.diagnosis.value,
@@ -2781,7 +2776,6 @@
                          'Núcleo': modal.nucleus.value, 'Plano': newPlan,
                          'Prazo': deadlineDate,
                          'Solicitado por': modal.requester.value, 'Área do Solicitante': modal.requesterArea.value,
-                         'Conta Contrato': modal.contract.value, 'Alimentador': modal.feeder.value,
                          'Título e-mail Relacionado': modal.relatedEmail.value, 'Diagnóstico': modal.diagnosis.value,
                          'Descrição': modal.description.value, 'Status': STATUS_TO_SHEET_MAP[newStatus] || newStatus,
                          'Gravidade (GUT)': `Gravidade (${getGUTValue('gut-g')})`, 'Urgência (GUT)': `Urgência (${getGUTValue('gut-u')})`, 'Tendência (GUT)': `Tendência (${getGUTValue('gut-t')})`
