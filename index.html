@@ -47,7 +47,7 @@
         .tooltip strong { color: #a5b4fc; }
         .tooltip em { color: #9ca3af; }
         .subtask-item.completed { text-decoration: line-through; color: #6b7280; }
-        .subtask-item.completed .subtask-timer, .subtask-item.completed .subtask-controls button { display: none; }
+        .subtask-item.completed .subtask-timer { display: none; }
         .circular-btn {
             display: inline-flex;
             align-items: center;
@@ -784,7 +784,10 @@
                  <div id="subtasks-section" class="mt-6 pt-4 border-t border-gray-700">
                     <h3 class="text-lg font-semibold mb-3 text-purple-300">Sub-atividades</h3>
                     <div class="flex items-center space-x-2 mb-4">
-                        <select id="subtask-catalog-select" class="w-full p-2 rounded bg-gray-700 border border-gray-600 flex-grow"></select>
+                        <!-- MELHORIA APLICADA AQUI -->
+                        <input type="text" id="subtask-catalog-select" list="subtask-catalog-options" placeholder="Digite para buscar uma atividade..." class="w-full p-2 rounded bg-gray-700 border border-gray-600 flex-grow">
+                        <datalist id="subtask-catalog-options"></datalist>
+                        <!-- FIM DA MELHORIA -->
                         <button type="button" id="add-subtask-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">Adicionar</button>
                     </div>
                     <div id="subtasks-list" class="space-y-2 max-h-48 overflow-y-auto pr-2"></div>
@@ -823,7 +826,8 @@
         deleteDoc,
         writeBatch,
         getDocs,
-        query
+        query,
+        enableIndexedDbPersistence // <-- ADICIONE ESTA LINHA
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     // Mantenha suas credenciais do Firebase
@@ -839,6 +843,14 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    enableIndexedDbPersistence(db)
+  .catch((err) => {
+      if (err.code == 'failed-precondition') {
+          console.warn("Múltiplas abas abertas, persistência offline pode não funcionar.");
+      } else if (err.code == 'unimplemented') {
+          console.warn("O navegador não suporta persistência offline.");
+      }
+  });
     const ID_DA_EQUIPE = "equipe_engenharia_principal";
 
     let unsubscribeTasks = null;
@@ -1305,6 +1317,14 @@
                         if (!newTaskData.startedAt) {
                             newTaskData.startedAt = creationDate;
                         }
+                        
+                        // ---> INÍCIO DA MELHORIA: Marcando subatividades como concluídas <---
+                        if (newTaskData.subtasks && newTaskData.subtasks.length > 0) {
+                            newTaskData.subtasks.forEach(sub => {
+                                sub.status = 'completed';
+                                sub.isTiming = false;
+                            });
+                        }
                     } else if (status === 'finalizado') {
                         newTaskData.finalizadoAt = completionDate;
                         // Se já vem finalizada, populamos todas as datas anteriores
@@ -1312,6 +1332,17 @@
                         if (!newTaskData.startedAt) newTaskData.startedAt = creationDate;
                         if (!newTaskData.studyCompletedAt) newTaskData.studyCompletedAt = completionDate;
                         if (!newTaskData.enteredRealizacaoAt) newTaskData.enteredRealizacaoAt = completionDate;
+
+               // ---> INÍCIO DA CORREÇÃO: Restaurando a regra de negócio <---
+                        // Se a demanda já vem finalizada, todas as suas subatividades 
+                        // também devem ser marcadas como concluídas.
+                        if (newTaskData.subtasks && newTaskData.subtasks.length > 0) {
+                            newTaskData.subtasks.forEach(sub => {
+                                sub.status = 'completed';
+                                sub.isTiming = false;
+                            });
+                        }
+
                     }
                 }
                 
@@ -2602,22 +2633,41 @@
                 item.className = `subtask-item flex items-center justify-between p-2 rounded-lg bg-gray-700/50 ${subtask.status === 'completed' ? 'completed' : ''}`;
                 item.dataset.subtaskId = subtask.id;
 
+                // --- Definição dos Ícones ---
                 const playButton = `<button type="button" data-action="play" class="circular-btn play-btn" title="Iniciar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" /></svg></button>`;
                 const pauseButton = `<button type="button" data-action="pause" class="circular-btn pause-btn" title="Pausar"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 00-1 1v2a1 1 0 102 0V9a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v2a1 1 0 102 0V9a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></button>`;
+                const completeIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>`;
+                const reopenIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"> <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z" clip-rule="evenodd" /> </svg>`;
+                const removeButton = `<button type="button" data-action="remove" class="text-red-400 hover:text-red-300" title="Remover sub-atividade"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg></button>`;
+
+                // --- Lógica Dinâmica de Conteúdo ---
                 const expectedTimeDisplay = subtask.expectedTime ? ` / ${subtask.expectedTime.toFixed(1)}h Prev.` : '';
+                let controlsHTML = '';
+
+                if (subtask.status === 'completed') {
+                    // Se concluída, mostra apenas o botão de Reabrir.
+                    controlsHTML = `
+                        <button type="button" data-action="complete" class="text-yellow-400 hover:text-yellow-300" title="Reabrir subatividade">
+                            ${reopenIcon}
+                        </button>
+                    `;
+                } else {
+                    // Se pendente, mostra os controles normais (play/pause, concluir, remover).
+                    controlsHTML = `
+                        ${subtask.isTiming ? pauseButton : playButton}
+                        <button type="button" data-action="complete" class="text-blue-400 hover:text-blue-300" title="Marcar como concluída">
+                            ${completeIcon}
+                        </button>
+                        ${removeButton}
+                    `;
+                }
 
                 item.innerHTML = `
                     <span class="flex-grow truncate pr-2" title="${subtask.name}">${subtask.name}</span>
                     <div class="flex items-center space-x-3">
-                        <span class="subtask-timer font-mono text-sm text-gray-300" title="Tempo Gasto / Previsto">${formatTime(subtask.timeSpent)}${expectedTimeDisplay}</span>
+                        ${subtask.status !== 'completed' ? `<span class="subtask-timer font-mono text-sm text-gray-300" title="Tempo Gasto / Previsto">${formatTime(subtask.timeSpent)}${expectedTimeDisplay}</span>` : ''}
                         <div class="subtask-controls flex items-center space-x-2">
-                            ${subtask.isTiming ? pauseButton : playButton}
-                            <button type="button" data-action="complete" class="text-blue-400 hover:text-blue-300" title="Marcar como concluída">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
-                            </button>
-                            <button type="button" data-action="remove" class="text-red-400 hover:text-red-300" title="Remover sub-atividade">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
-                            </button>
+                            ${controlsHTML}
                         </div>
                     </div>
                 `;
@@ -2637,8 +2687,8 @@
 
              modal.planOptions.innerHTML = planOptions.map(p => `<option value="${p}"></option>`).join('');
              modal.feederOptions.innerHTML = alimentadoresData.map(a => `<option value="${a.Alimentador}"></option>`).join('');
-             modal.subtasks.catalogSelect.innerHTML = Object.keys(activityCatalog)
-                .map(name => `<option value="${name}">${name}</option>`).join('');
+             document.getElementById('subtask-catalog-options').innerHTML = Object.keys(activityCatalog)
+                .map(name => `<option value="${name}"></option>`).join('');
 
              if (taskId) {
                  const task = tasks.find(t => t.id === taskId);
@@ -3501,58 +3551,91 @@
             if (appStarted) return;
             appStarted = true;
 
+            // Função auxiliar para processar dados de tarefas de forma consistente
+            const processTaskData = (docData) => {
+                // Converte timestamps do Firebase para objetos Date do JavaScript
+                const convertTimestamps = (obj) => {
+                    for (const key in obj) {
+                        if (obj[key] && typeof obj[key].toDate === 'function') {
+                            obj[key] = obj[key].toDate();
+                        } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+                            convertTimestamps(obj[key]);
+                        }
+                    }
+                };
+                convertTimestamps(docData);
+
+                // Lógica para compatibilidade com status antigos do seu sistema
+                const legacyStatusMap = { 'em andamento': 'estudo_andamento', 'em_andamento': 'estudo_andamento', 'em validacao': 'estudo_validacao', 'em_validacao': 'estudo_validacao','validacao': 'estudo_validacao', 'andamento': 'estudo_andamento','concluido': 'estudo_concluido', 'concluído': 'estudo_concluido', 'concluida': 'estudo_concluido', 'concluída': 'estudo_concluido' };
+                const oldStatus = docData.status;
+                if (legacyStatusMap[oldStatus]) {
+                    docData.status = legacyStatusMap[oldStatus];
+                    if ((oldStatus.includes('andamento') || oldStatus.includes('validacao')) && !docData.startedAt) {
+                        docData.startedAt = docData.createdAt;
+                    }
+                    if (oldStatus.includes('concluid')) {
+                        if (!docData.startedAt) docData.startedAt = docData.createdAt;
+                        if (!docData.studyCompletedAt) docData.studyCompletedAt = docData.completedAt;
+                    }
+                }
+                return docData;
+            };
+
             const tasksCollectionRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks');
             
-            // Listener unificado que carrega os dados iniciais e depois apenas as mudanças,
-            // evitando duplicação e garantindo que a tabela seja renderizada.
+            // OUVINTE OTIMIZADO: Processa apenas as mudanças, não a coleção inteira.
             unsubscribeTasks = onSnapshot(query(tasksCollectionRef), (snapshot) => {
-                tasks = []; // Limpa a lista local a cada atualização para reconstruir do zero
+                let needsFullRerender = false;
+                let headersNeedUpdate = false;
 
-                snapshot.forEach((doc) => {
-                    const docData = doc.data();
-                    
-                    const convertTimestamps = (obj) => { /* ... (função interna não precisa mudar) ... */ };
-                    convertTimestamps(docData);
+                snapshot.docChanges().forEach((change) => {
+                    needsFullRerender = true;
+                    const changedData = processTaskData(change.doc.data());
+                    const taskId = change.doc.id;
 
-                    // Lógica de compatibilidade com status antigos
-                    const legacyStatusMap = { 'em andamento': 'estudo_andamento', 'em_andamento': 'estudo_andamento', 'em validacao': 'estudo_validacao', 'em_validacao': 'estudo_validacao','validacao': 'estudo_validacao', 'andamento': 'estudo_andamento','concluido': 'estudo_concluido', 'concluído': 'estudo_concluido', 'concluida': 'estudo_concluido', 'concluída': 'estudo_concluido' };
-                    const oldStatus = docData.status;
-                    if (legacyStatusMap[oldStatus]) {
-                        docData.status = legacyStatusMap[oldStatus];
-                        if ((oldStatus.includes('andamento') || oldStatus.includes('validacao')) && !docData.startedAt) {
-                            docData.startedAt = docData.createdAt;
-                        }
-                        if (oldStatus.includes('concluid')) {
-                            if (!docData.startedAt) docData.startedAt = docData.createdAt;
-                            if (!docData.studyCompletedAt) docData.studyCompletedAt = docData.completedAt;
+                    if (change.type === "added") {
+                        // Adiciona a nova tarefa se ela ainda não existir na lista local
+                        if (!tasks.some(t => t.id === taskId)) {
+                           tasks.push({ id: taskId, ...changedData });
+                           headersNeedUpdate = true; // Sinaliza que os filtros talvez precisem ser atualizados
                         }
                     }
-                    
-                    tasks.push({ id: doc.id, ...docData });
-                });
-
-                // --- INÍCIO DA CORREÇÃO CRÍTICA ---
-                // Reconstrói a lista de cabeçalhos (allHeaders) a partir dos dados recém-carregados.
-                // Esta parte foi perdida na otimização anterior e é por isso que a tabela não carregava.
-                const newHeaders = new Set();
-                const addedFields = ['Plano', 'Prazo', 'Diagnóstico', 'Solicitado por', 'Área do Solicitante', 'Conta Contrato', 'Alimentador', 'Título e-mail Relacionado', 'Criado por'];
-                addedFields.forEach(h => newHeaders.add(h));
-                tasks.forEach(task => {
-                    if (task.originalData) {
-                        Object.keys(task.originalData).forEach(key => newHeaders.add(key));
+                    if (change.type === "modified") {
+                        // Encontra e atualiza a tarefa existente na lista local
+                        const index = tasks.findIndex(t => t.id === taskId);
+                        if (index > -1) {
+                            tasks[index] = { id: taskId, ...changedData };
+                        }
+                    }
+                    if (change.type === "removed") {
+                        // Remove a tarefa da lista local
+                        tasks = tasks.filter(t => t.id !== taskId);
                     }
                 });
-                allHeaders = Array.from(newHeaders);
-                // --- FIM DA CORREÇÃO CRÍTICA ---
 
-                // Após reconstruir a lista de tarefas E os cabeçalhos, atualizamos a interface
-                populateGlobalFilters();
-                renderActiveTabView();
+                // Se uma nova tarefa foi adicionada, pode haver novos cabeçalhos (colunas)
+                // então reconstruímos a lista de cabeçalhos e os filtros.
+                if (headersNeedUpdate) {
+                    const newHeaders = new Set();
+                    const addedFields = ['Plano', 'Prazo', 'Diagnóstico', 'Solicitado por', 'Área do Solicitante', 'Conta Contrato', 'Alimentador', 'Título e-mail Relacionado', 'Criado por'];
+                    addedFields.forEach(h => newHeaders.add(h));
+                    tasks.forEach(task => {
+                        if (task.originalData) {
+                            Object.keys(task.originalData).forEach(key => newHeaders.add(key));
+                        }
+                    });
+                    allHeaders = Array.from(newHeaders);
+                    populateGlobalFilters();
+                }
+
+                // Se houve qualquer mudança (adição, modificação, remoção), atualizamos a tela.
+                if (needsFullRerender) {
+                    renderActiveTabView();
+                }
 
             }, (error) => console.error("Erro no listener de tasks:", error));
 
-
-            // O restante da função continua com as outras otimizações já feitas...
+            // Os outros listeners (catálogo, logs, etc.) continuam como estavam, pois mudam com menos frequência.
             const catalogRef = collection(db, 'dados_da_equipe', ID_DA_EQUIPE, 'activity_catalog');
             unsubscribeCatalog = onSnapshot(catalogRef, (snapshot) => {
                 activityCatalog = {};
@@ -3893,7 +3976,8 @@
                 const taskId = elements.modal.id.value;
                 const task = tasks.find(t => t.id === taskId);
                 if (task) {
-                    const activityName = elements.modal.subtasks.catalogSelect.value;
+                    const activityInput = document.getElementById('subtask-catalog-select');
+                    const activityName = activityInput.value;
                     const activityDetails = activityCatalog[activityName];
                     if (!activityDetails) return;
                     const newSubtask = {
@@ -3930,8 +4014,29 @@
                     let updatedSubtasks = [...task.subtasks];
 
                     if (action === 'complete') {
-                        if (updatedSubtasks[subtaskIndex].isTiming) await handlePause(taskId, subtaskId);
-                        updatedSubtasks[subtaskIndex].status = 'completed';
+                        // Se a subatividade já está concluída, vamos revertê-la.
+                        if (updatedSubtasks[subtaskIndex].status === 'completed') {
+                            if (confirm('Deseja reabrir esta subatividade? O tempo gasto será mantido.')) {
+                                updatedSubtasks[subtaskIndex].status = 'pending';
+                                
+                                // ---> NOVO ALERTA (PARTE DA MELHORIA 2) <---
+                                // Se o card principal já estava como "Estudo Concluído" ou além,
+                                // reabrir uma subatividade caracteriza um retrabalho.
+                                const statusOrder = Object.keys(STATUS_OPTIONS);
+                                const currentStatusIndex = statusOrder.indexOf(task.status);
+                                const completionBoundaryIndex = statusOrder.indexOf('estudo_concluido');
+
+                                if (currentStatusIndex >= completionBoundaryIndex) {
+                                    alert("ATENÇÃO: Você reabriu uma subatividade em um card cujo estudo já estava concluído. Isso será contabilizado como retrabalho e pode exigir que o card seja movido para uma etapa anterior.");
+                                    // A lógica de mover o card e incrementar o retrabalho já existe no drag-and-drop,
+                                    // mas este alerta educa o usuário sobre a necessidade da ação.
+                                }
+                            }
+                        } else {
+                            // Comportamento original: marcar como concluída.
+                            if (updatedSubtasks[subtaskIndex].isTiming) await handlePause(taskId, subtaskId);
+                            updatedSubtasks[subtaskIndex].status = 'completed';
+                        }
                     } else if (action === 'remove') {
                         if (confirm(`Tem certeza que deseja remover a sub-atividade "${updatedSubtasks[subtaskIndex].name}"?`)) {
                            updatedSubtasks.splice(subtaskIndex, 1);
