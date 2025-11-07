@@ -99,6 +99,13 @@
         input[type=number] {
           -moz-appearance: textfield;
         }
+        .quick-filter-btn {
+            transition: color 0.2s;
+        }
+        .quick-filter-btn.active {
+            color: #3b82f6; /* Azul para indicar que o filtro está ativo */
+        }
+    </style>
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -257,7 +264,7 @@
                         <h3 class="text-sm font-semibold text-gray-400">Cycle Time de Estudo</h3>
                         <p id="kpi-cycle-time-estudo" class="text-3xl font-bold text-blue-400">-- dias</p>
                     </div>
-                     <div class="bg-gray-800 p-4 rounded-lg text-center">
+                    <div class="bg-gray-800 p-4 rounded-lg text-center">
                         <h3 class="text-sm font-semibold text-gray-400">Cycle Time da Ação</h3>
                         <p id="kpi-cycle-time-acao" class="text-3xl font-bold text-cyan-400">-- dias</p>
                     </div>
@@ -266,16 +273,32 @@
                         <p id="kpi-waiting-time" class="text-3xl font-bold text-orange-400">-- dias</p>
                     </div>
                     <div class="bg-gray-800 p-4 rounded-lg text-center">
-                        <h3 class="text-sm font-semibold text-gray-400">Demandas Estudadas (7d)</h3>
-                        <p id="kpi-throughput-estudo" class="text-3xl font-bold text-green-400">-- itens</p>
-                    </div>
-                     <div class="bg-gray-800 p-4 rounded-lg text-center">
-                        <h3 class="text-sm font-semibold text-gray-400">Demandas Resolvidas (7d)</h3>
-                        <p id="kpi-throughput-resolvidas" class="text-3xl font-bold text-emerald-400">-- itens</p>
-                    </div>
-                    <div class="bg-gray-800 p-4 rounded-lg text-center">
                         <h3 class="text-sm font-semibold text-gray-400">% de Retrabalho</h3>
                         <p id="kpi-rework-percentage" class="text-3xl font-bold text-red-400">-- %</p>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg text-center">
+                        <h3 class="text-sm font-semibold text-gray-400">Demandas Estudadas (7d)</h3>
+                        <div class="flex items-center justify-center space-x-2">
+                            <p id="kpi-throughput-estudo" class="text-3xl font-bold text-green-400">-- itens</p>
+                            <button id="filter-toggle-studied" class="quick-filter-btn text-gray-500 hover:text-white" title="Filtrar demandas com estudo concluído nos últimos 7 dias">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.022 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="bg-gray-800 p-4 rounded-lg text-center">
+                        <h3 class="text-sm font-semibold text-gray-400">Demandas Resolvidas (7d)</h3>
+                        <div class="flex items-center justify-center space-x-2">
+                            <p id="kpi-throughput-resolvidas" class="text-3xl font-bold text-emerald-400">-- itens</p>
+                            <button id="filter-toggle-resolved" class="quick-filter-btn text-gray-500 hover:text-white" title="Filtrar demandas finalizadas nos últimos 7 dias">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.022 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <!-- FIM DA ALTERAÇÃO: KPIs do Dashboard -->
@@ -929,6 +952,7 @@
         let activityCatalog = {};
         let currentView = 'manager';
         let isEditingModal = false;
+        let activeQuickFilter = null;
 
         // CORREÇÃO: Catálogo padrão atualizado com os dados da imagem.
         const defaultActivityCatalog = {
@@ -1544,34 +1568,48 @@
 
          const getFilteredTasks = () => {
              const activeFilters = Array.from(document.querySelectorAll('.global-filter')).filter(f => f.value !== '');
-             if (activeFilters.length === 0) return tasks;
+             
+             let filteredTasks = tasks; // Começa com todas as tarefas
 
-             return tasks.filter(task => {
-                 return activeFilters.every(filter => {
-                     const filterKey = filter.dataset.filterKey;
-                     const filterValue = filter.value;
-
-                     if (filter.type === 'text') {
-                         const lowerCaseFilterValue = filterValue.toLowerCase();
-                         let taskValue = '';
-
-                         if (filterKey === 'ID_REF') {
-                             taskValue = String(task.originalId);
-                         } else if (filterKey === 'Título') {
-                             taskValue = String(task.title);
-                         } else if (task.originalData && task.originalData[filterKey] !== undefined) {
-                             taskValue = String(task.originalData[filterKey]);
+             // 1. Aplica os filtros globais primeiro
+             if (activeFilters.length > 0) {
+                 filteredTasks = tasks.filter(task => {
+                     return activeFilters.every(filter => {
+                         const filterKey = filter.dataset.filterKey;
+                         const filterValue = filter.value;
+                         if (filter.type === 'text') {
+                             const lowerCaseFilterValue = filterValue.toLowerCase();
+                             let taskValue = '';
+                             if (filterKey === 'ID_REF') taskValue = String(task.originalId);
+                             else if (filterKey === 'Título') taskValue = String(task.title);
+                             else if (task.originalData && task.originalData[filterKey] !== undefined) taskValue = String(task.originalData[filterKey]);
+                             return taskValue.toLowerCase().includes(lowerCaseFilterValue);
                          }
-
-                         return taskValue.toLowerCase().includes(lowerCaseFilterValue);
-                     }
-
-                     if (filterKey === 'status') return task.status === filterValue;
-                     if (filterKey === 'responsible') return task.responsible === filterValue;
-
-                     return task.originalData && String(task.originalData[filterKey]) === filterValue;
+                         if (filterKey === 'status') return task.status === filterValue;
+                         if (filterKey === 'responsible') return task.responsible === filterValue;
+                         return task.originalData && String(task.originalData[filterKey]) === filterValue;
+                     });
                  });
-             });
+             }
+
+             // 2. Aplica o novo filtro rápido (se estiver ativo)
+             if (activeQuickFilter) {
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                sevenDaysAgo.setHours(0, 0, 0, 0);
+
+                if (activeQuickFilter === 'studied') {
+                    filteredTasks = filteredTasks.filter(task => 
+                        task.studyCompletedAt && toValidDate(task.studyCompletedAt) >= sevenDaysAgo
+                    );
+                } else if (activeQuickFilter === 'resolved') {
+                    filteredTasks = filteredTasks.filter(task => 
+                        task.finalizadoAt && toValidDate(task.finalizadoAt) >= sevenDaysAgo
+                    );
+                }
+             }
+
+             return filteredTasks; // Retorna a lista final de tarefas filtradas
          };
 
          const sortTasks = (tasksToSort, sortBy, sortDirection) => {
@@ -3941,8 +3979,52 @@
              elements.importAlimentadoresBtn.addEventListener('click', () => elements.fileInputAlimentadores.click());
              elements.fileInputAlimentadores.addEventListener('change', (e) => handleFileImport(e, processAlimentadoresData));
              elements.clearDataBtn.addEventListener('click', clearData);
-             elements.globalFilters.addEventListener('input', e => { if (e.target.classList.contains('global-filter')) renderActiveTabView(); });
-             elements.clearFiltersBtn.addEventListener('click', () => { document.querySelectorAll('.global-filter').forEach(f => f.value = ''); renderActiveTabView(); });
+             
+             elements.globalFilters.addEventListener('input', e => { 
+                if (e.target.classList.contains('global-filter')) {
+                    // Se o usuário mexer em um filtro global, desativa o filtro rápido.
+                    if (activeQuickFilter) {
+                        activeQuickFilter = null;
+                        document.getElementById('filter-toggle-studied').classList.remove('active');
+                        document.getElementById('filter-toggle-resolved').classList.remove('active');
+                    }
+                    renderActiveTabView();
+                }
+             });
+
+             elements.clearFiltersBtn.addEventListener('click', () => { 
+                document.querySelectorAll('.global-filter').forEach(f => f.value = '');
+                activeQuickFilter = null;
+                document.getElementById('filter-toggle-studied').classList.remove('active');
+                document.getElementById('filter-toggle-resolved').classList.remove('active');
+                renderActiveTabView(); 
+            });
+            
+            // --- INÍCIO DA CORREÇÃO ---
+            // O código para os filtros rápidos foi movido para cá.
+            const studiedToggle = document.getElementById('filter-toggle-studied');
+            const resolvedToggle = document.getElementById('filter-toggle-resolved');
+            
+            const handleQuickFilterClick = (filterType) => {
+                // Ao usar um filtro rápido, limpamos os filtros globais.
+                document.querySelectorAll('.global-filter').forEach(f => f.value = '');
+
+                if (activeQuickFilter === filterType) {
+                    activeQuickFilter = null; 
+                } else {
+                    activeQuickFilter = filterType; 
+                }
+                
+                studiedToggle.classList.toggle('active', activeQuickFilter === 'studied');
+                resolvedToggle.classList.toggle('active', activeQuickFilter === 'resolved');
+
+                renderActiveTabView();
+            };
+
+            studiedToggle.addEventListener('click', () => handleQuickFilterClick('studied'));
+            resolvedToggle.addEventListener('click', () => handleQuickFilterClick('resolved'));
+            // --- FIM DA CORREÇÃO ---
+
              elements.kanbanSortBy.addEventListener('change', handleSortChange);
              elements.kanbanSortDirection.addEventListener('change', handleSortChange);
              elements.modal.type.addEventListener('change', updatePrioritizationView);
@@ -4014,26 +4096,19 @@
                     let updatedSubtasks = [...task.subtasks];
 
                     if (action === 'complete') {
-                        // Se a subatividade já está concluída, vamos revertê-la.
                         if (updatedSubtasks[subtaskIndex].status === 'completed') {
                             if (confirm('Deseja reabrir esta subatividade? O tempo gasto será mantido.')) {
                                 updatedSubtasks[subtaskIndex].status = 'pending';
                                 
-                                // ---> NOVO ALERTA (PARTE DA MELHORIA 2) <---
-                                // Se o card principal já estava como "Estudo Concluído" ou além,
-                                // reabrir uma subatividade caracteriza um retrabalho.
                                 const statusOrder = Object.keys(STATUS_OPTIONS);
                                 const currentStatusIndex = statusOrder.indexOf(task.status);
                                 const completionBoundaryIndex = statusOrder.indexOf('estudo_concluido');
 
                                 if (currentStatusIndex >= completionBoundaryIndex) {
                                     alert("ATENÇÃO: Você reabriu uma subatividade em um card cujo estudo já estava concluído. Isso será contabilizado como retrabalho e pode exigir que o card seja movido para uma etapa anterior.");
-                                    // A lógica de mover o card e incrementar o retrabalho já existe no drag-and-drop,
-                                    // mas este alerta educa o usuário sobre a necessidade da ação.
                                 }
                             }
                         } else {
-                            // Comportamento original: marcar como concluída.
                             if (updatedSubtasks[subtaskIndex].isTiming) await handlePause(taskId, subtaskId);
                             updatedSubtasks[subtaskIndex].status = 'completed';
                         }
@@ -4088,7 +4163,6 @@
                         const oldStatusIndex = statusOrder.indexOf(task.status);
                         const completionBoundaryIndex = statusOrder.indexOf('estudo_concluido');
 
-                        // INÍCIO DA ALTERAÇÃO: Lógica de Negócio para o Kanban
                         if (newStatusIndex >= completionBoundaryIndex && task.subtasks && task.subtasks.some(st => st.status !== 'completed')) {
                             alert("Ação bloqueada: Para mover um card para 'Estudo Concluído' ou uma etapa posterior, todas as suas sub-atividades devem estar concluídas.");
                             renderBoard(getFilteredTasks()); 
@@ -4100,7 +4174,6 @@
                             originalData: { ...task.originalData, 'Status': STATUS_TO_SHEET_MAP[newStatus] || newStatus } 
                         };
 
-                        // Pausa automática ao entrar em 'Aguardando Dados'
                         if (newStatus === 'aguardando_dados') {
                             const runningSubtask = task.subtasks?.find(st => st.isTiming);
                             if (runningSubtask) {
@@ -4108,19 +4181,17 @@
                             }
                             dataToUpdate.enteredWaitingAt = new Date();
                         }
-                        // Cálculo do tempo de espera ao sair de 'Aguardando Dados'
+                        
                         if (task.status === 'aguardando_dados' && task.enteredWaitingAt) {
                             const waitingMs = new Date() - toValidDate(task.enteredWaitingAt);
                             dataToUpdate.waitingTime = (task.waitingTime || 0) + waitingMs;
                             dataToUpdate.enteredWaitingAt = null;
                         }
 
-                        // Timestamps de conclusão
                         if (newStatus === 'estudo_concluido' && !task.studyCompletedAt) dataToUpdate.studyCompletedAt = new Date();
                         if (newStatus === 'acao_andamento' && !task.enteredRealizacaoAt) dataToUpdate.enteredRealizacaoAt = new Date();
                         if (newStatus === 'finalizado' && !task.finalizadoAt) dataToUpdate.finalizadoAt = new Date();
 
-                        // Lógica de Retrabalho
                         if (oldStatusIndex >= completionBoundaryIndex && newStatusIndex < completionBoundaryIndex) {
                             dataToUpdate.reworkCount = (task.reworkCount || 0) + 1;
                             dataToUpdate.studyCompletedAt = null;
@@ -4134,7 +4205,6 @@
                         }
                         
                         if (newStatus === 'estudo_andamento' && !task.startedAt) dataToUpdate.startedAt = new Date();
-                        // FIM DA ALTERAÇÃO
                         
                         const taskRef = doc(db, 'dados_da_equipe', ID_DA_EQUIPE, 'tasks', draggedTaskId);
                         await updateDoc(taskRef, dataToUpdate);
@@ -4178,7 +4248,6 @@
                 renderAlimentadoresTable();
             });
 
-// COLE O NOVO CÓDIGO DE LISTENERS EXATAMENTE AQUI
             document.getElementById('add-user-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const matricula = document.getElementById('new-user-matricula').value.trim();
