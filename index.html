@@ -710,7 +710,8 @@
                         </div>
                         <div>
                             <label for="demand-responsible" class="block mb-1 font-semibold text-sm">Atribuído a (Focal)</label>
-                            <select id="demand-responsible" class="w-full p-2 rounded bg-gray-700 border border-gray-600"></select>
+                            <input type="text" id="demand-responsible" list="responsible-options" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                            <datalist id="responsible-options"></datalist>
                         </div>
                         
                         <!-- INÍCIO DA ALTERAÇÃO: Campo de Colaboradores -->
@@ -1187,6 +1188,7 @@
                 status: document.getElementById('demand-status'),
                 demandTitle: document.getElementById('demand-title'),
                 responsible: document.getElementById('demand-responsible'),
+                responsibleOptions: document.getElementById('responsible-options'),
                 // INÍCIO DA ALTERAÇÃO: Mapeamento de novos elementos do modal
                 addCollaboratorSelect: document.getElementById('add-collaborator-select'),
                 addCollaboratorBtn: document.getElementById('add-collaborator-btn'),
@@ -2830,7 +2832,7 @@
              modal.gut.fields.classList.add('hidden');
              modal.rice.fields.classList.add('hidden');
              const responsibleAndCollaboratorOptions = '<option value="">Ninguém atribuído</option>' + teamMembers.map(m => `<option value="${m}">${m}</option>`).join('');
-             modal.responsible.innerHTML = responsibleAndCollaboratorOptions;
+             modal.responsibleOptions.innerHTML = teamMembers.map(m => `<option value="${m}"></option>`).join('');
              modal.addCollaboratorSelect.innerHTML = responsibleAndCollaboratorOptions; // Popula o select de colaboradores
              modal.status.innerHTML = Object.entries(STATUS_OPTIONS).map(([key, value]) => `<option value="${key}">${value}</option>`).join('');
 
@@ -2947,7 +2949,11 @@
                  modal.status.value = task.status;
                  return;
              }
-
+             const newResponsible = modal.responsible.value.trim();
+             if (newResponsible && !teamMembers.includes(newResponsible)) {
+                teamMembers.push(newResponsible);
+                teamMembers.sort();
+             }
              const getGUTValue = (elementId) => {
                 const value = parseInt(document.getElementById(elementId).value, 10);
                 return isNaN(value) ? 0 : value;
