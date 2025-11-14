@@ -766,10 +766,25 @@
                                 <input type="datetime-local" id="demand-creation-date" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
                             </div>
                         </div>
-                         <div id="completion-date-wrapper" class="hidden">
-                             <label for="demand-completion-date" class="block mb-1 font-semibold text-sm">Data de Conclusão</label>
-                             <input type="datetime-local" id="demand-completion-date" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                        
+                        <!-- Campos de data editáveis -->
+                        <div id="study-start-date-wrapper" class="hidden">
+                             <label for="demand-study-start-date" class="block mb-1 font-semibold text-sm">Data de Início do Estudo</label>
+                             <input type="datetime-local" id="demand-study-start-date" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
                         </div>
+                        <div id="study-completion-date-wrapper" class="hidden">
+                             <label for="demand-study-completion-date" class="block mb-1 font-semibold text-sm">Data de Estudo Concluído</label>
+                             <input type="datetime-local" id="demand-study-completion-date" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                        </div>
+                        <div id="action-start-date-wrapper" class="hidden">
+                             <label for="demand-action-start-date" class="block mb-1 font-semibold text-sm">Data de Início da Ação</label>
+                             <input type="datetime-local" id="demand-action-start-date" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                        </div>
+                        <div id="finalization-date-wrapper" class="hidden">
+                             <label for="demand-finalization-date" class="block mb-1 font-semibold text-sm">Data de Finalização</label>
+                             <input type="datetime-local" id="demand-finalization-date" class="w-full p-2 rounded bg-gray-700 border border-gray-600">
+                        </div>
+
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label for="demand-municipio" class="block mb-1 font-semibold text-sm">Município</label>
@@ -1216,8 +1231,18 @@
                 description: document.getElementById('demand-description'),
                 type: document.getElementById('demand-type'),
                 isPrivate: document.getElementById('demand-is-private'),
-                completionDateWrapper: document.getElementById('completion-date-wrapper'),
-                completionDate: document.getElementById('demand-completion-date'),
+                
+                // INÍCIO DA ALTERAÇÃO: Mapeamento dos novos campos de data
+                studyStartDateWrapper: document.getElementById('study-start-date-wrapper'),
+                studyStartDate: document.getElementById('demand-study-start-date'),
+                studyCompletionDateWrapper: document.getElementById('study-completion-date-wrapper'),
+                studyCompletionDate: document.getElementById('demand-study-completion-date'),
+                actionStartDateWrapper: document.getElementById('action-start-date-wrapper'),
+                actionStartDate: document.getElementById('demand-action-start-date'),
+                finalizationDateWrapper: document.getElementById('finalization-date-wrapper'),
+                finalizationDate: document.getElementById('demand-finalization-date'),
+                // FIM DA ALTERAÇÃO
+
                 critScore: document.getElementById('crit-score'),
                 critReclamacoes: document.getElementById('crit-reclamacoes'),
                 critPrazo: document.getElementById('crit-prazo'),
@@ -2660,12 +2685,28 @@
              createOrUpdateChart('cumulativeFlowChart', 'line', 'Diagrama de Fluxo Cumulativo (CFD) - Semanal', { labels: allWeeklyLabels, datasets }, { scales: { y: { stacked: true } }, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'top' } } });
          };
 
-         const toggleCompletionDateVisibility = () => {
-             const isFinalizado = elements.modal.status.value === 'finalizado';
-             elements.modal.completionDateWrapper.style.display = isFinalizado ? 'block' : 'none';
-             if (isFinalizado && !elements.modal.completionDate.value) {
-                elements.modal.completionDate.value = toDateTimeLocal(new Date().toISOString());
-             }
+         const updateDateInputVisibility = () => {
+            const status = elements.modal.status.value;
+            const statusOrder = Object.keys(STATUS_OPTIONS);
+            const currentStatusIndex = statusOrder.indexOf(status);
+
+            const showStudyStart = currentStatusIndex >= statusOrder.indexOf('estudo_andamento');
+            const showStudyCompletion = currentStatusIndex >= statusOrder.indexOf('estudo_concluido');
+            const showActionStart = currentStatusIndex >= statusOrder.indexOf('acao_andamento');
+            const showFinalization = currentStatusIndex >= statusOrder.indexOf('finalizado');
+            
+            elements.modal.studyStartDateWrapper.style.display = showStudyStart ? 'block' : 'none';
+            elements.modal.studyCompletionDateWrapper.style.display = showStudyCompletion ? 'block' : 'none';
+            elements.modal.actionStartDateWrapper.style.display = showActionStart ? 'block' : 'none';
+            elements.modal.finalizationDateWrapper.style.display = showFinalization ? 'block' : 'none';
+
+            // Preenche a data automaticamente apenas se o campo estiver vazio ao se tornar visível
+            if (showStudyCompletion && !elements.modal.studyCompletionDate.value) {
+                elements.modal.studyCompletionDate.value = toDateTimeLocal(new Date().toISOString());
+            }
+            if (showFinalization && !elements.modal.finalizationDate.value) {
+                elements.modal.finalizationDate.value = toDateTimeLocal(new Date().toISOString());
+            }
          };
 
          const updateTaskTotalTime = (task) => {
@@ -2914,7 +2955,13 @@
                     modal.superintendencia.value = '';
                 }
 
-                 modal.completionDate.value = toDateTimeLocal(task.finalizadoAt || task.completedAt);
+                // INÍCIO DA ALTERAÇÃO: Popula todos os campos de data
+                modal.studyStartDate.value = toDateTimeLocal(task.startedAt);
+                modal.studyCompletionDate.value = toDateTimeLocal(task.studyCompletedAt);
+                modal.actionStartDate.value = toDateTimeLocal(task.enteredRealizacaoAt);
+                modal.finalizationDate.value = toDateTimeLocal(task.finalizadoAt);
+                // FIM DA ALTERAÇÃO
+
                  modal.critScore.textContent = (task.scoreGUT || task.scoreRICE || 0).toFixed(1);
                  modal.critReclamacoes.textContent = task.reclamacoes30d || 0;
                  modal.critPrazo.textContent = formatDate(task.createdAt);
@@ -2968,7 +3015,7 @@
              }
 
              updatePrioritizationView();
-             toggleCompletionDateVisibility();
+             updateDateInputVisibility();
              modal.container.classList.remove('hidden');
              modal.container.classList.add('flex');
          };
@@ -3012,9 +3059,14 @@
              }
 
             let dataToSave = {};
+            // INÍCIO DA ALTERAÇÃO: Lê as datas dos novos campos
             const creationDate = new Date(modal.creationDate.value);
             const deadlineDate = modal.deadline.value ? new Date(modal.deadline.value) : null;
-            const completionDate = modal.completionDate.value ? new Date(modal.completionDate.value) : null;
+            const studyStartDate = modal.studyStartDate.value ? new Date(modal.studyStartDate.value) : null;
+            const studyCompletionDate = modal.studyCompletionDate.value ? new Date(modal.studyCompletionDate.value) : null;
+            const actionStartDate = modal.actionStartDate.value ? new Date(modal.actionStartDate.value) : null;
+            const finalizationDate = modal.finalizationDate.value ? new Date(modal.finalizationDate.value) : null;
+            // FIM DA ALTERAÇÃO
 
             if (task) {
                 const oldStatus = task.status;
@@ -3076,17 +3128,26 @@
                     dataToSave.waitingTime = (task.waitingTime || 0) + waitingMs;
                     dataToSave.enteredWaitingAt = null;
                 }
-                if (newStatus === 'estudo_andamento' && !task.startedAt) dataToSave.startedAt = new Date();
-                if (newStatus === 'estudo_concluido' && !task.studyCompletedAt) dataToSave.studyCompletedAt = new Date();
-                if (newStatus === 'acao_andamento' && !task.enteredRealizacaoAt) dataToSave.enteredRealizacaoAt = new Date();
+                
+                // INÍCIO DA ALTERAÇÃO: Prioriza datas manuais e depois aplica automação
+                dataToSave.startedAt = studyStartDate || task.startedAt;
+                dataToSave.studyCompletedAt = studyCompletionDate || task.studyCompletedAt;
+                dataToSave.enteredRealizacaoAt = actionStartDate || task.enteredRealizacaoAt;
+                dataToSave.finalizadoAt = finalizationDate || task.finalizadoAt;
+
+                // Lógica de automação SÓ se a data manual não foi fornecida
+                if (newStatus === 'estudo_andamento' && !dataToSave.startedAt) dataToSave.startedAt = new Date();
+                if (newStatus === 'estudo_concluido' && !dataToSave.studyCompletedAt) dataToSave.studyCompletedAt = new Date();
+                if (newStatus === 'acao_andamento' && !dataToSave.enteredRealizacaoAt) dataToSave.enteredRealizacaoAt = new Date();
+                
                 if (newStatus === 'finalizado') {
-                    if (completionDate) dataToSave.finalizadoAt = completionDate;
-                    else if (oldStatus !== 'finalizado') dataToSave.finalizadoAt = new Date();
-                    dataToSave.originalData['Data de Conclusão'] = dataToSave.finalizadoAt;
+                    if (!dataToSave.finalizadoAt) dataToSave.finalizadoAt = new Date();
                 } else {
-                    dataToSave.finalizadoAt = null;
-                    dataToSave.originalData['Data de Conclusão'] = null;
+                    // Se o status for alterado para algo antes de 'finalizado', e não houver data manual, limpa a data de finalização
+                    if (!finalizationDate) dataToSave.finalizadoAt = null;
                 }
+                dataToSave.originalData['Data de Conclusão'] = dataToSave.finalizadoAt;
+                // FIM DA ALTERAÇÃO
                 
                 if (dataToSave.demandType === 'problema') {
                     dataToSave.gut = { g: getGUTValue('gut-g'), u: getGUTValue('gut-u'), t: getGUTValue('gut-t') };
@@ -4160,7 +4221,7 @@ const table = `
              elements.modal.cancelBtn.addEventListener('click', closeModal);
              elements.modal.closeBtn.addEventListener('click', closeModal);
              elements.modal.form.addEventListener('submit', handleFormSubmit);
-             elements.modal.status.addEventListener('change', toggleCompletionDateVisibility);
+             elements.modal.status.addEventListener('change', updateDateInputVisibility);
              elements.modal.deleteBtn.addEventListener('click', handleDeleteDemand);
              elements.importDemandsBtn.addEventListener('click', () => elements.fileInputDemands.click());
              elements.fileInputDemands.addEventListener('change', (e) => handleFileImport(e, processDemandsData));
